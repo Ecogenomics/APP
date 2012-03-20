@@ -109,7 +109,7 @@ if($global_JN_file_count > $global_norm_num_reps) { $global_JN_file_count = $glo
 if(exists $options->{'identity'}) { $global_similarity_setting = $options->{'identity'}; }
 if(exists $options->{'e'}) { $global_e_value = $options->{'e'}; }
 
-print "Checking is all the config checks out...\t\t";
+print "Checking if all the config checks out...\t\t";
 parse_config_results();
 
 # update our databases (GG by default)
@@ -123,6 +123,12 @@ if($global_comp_DB_type eq "SILVA")
     $TAX_blast_file = $SILVA_TAX_blast_file;
     $imputed_file = $SILVA_imputed_file;
 }
+
+#### Check the user options and override if required
+$TAX_tax_file = &overrideDefault($TAX_tax_file, "taxonomy");
+$TAX_blast_file = &overrideDefault($TAX_blast_file, "blast");
+$imputed_file = &overrideDefault($imputed_file, "imputed");
+
 
 #### Start the results pipeline!
 print "All good!\n";
@@ -763,7 +769,7 @@ sub parse_config_results
 # TEMPLATE SUBS
 ######################################################################
 sub checkParams {
-    my @standard_options = ( "help|h+", "config|c:s", "identity|i:i", "e:i");
+    my @standard_options = ( "help|h+", "config|c:s", "identity|i:i", "e:i", "b|blast:s", "t|taxonomy:s");
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -784,7 +790,7 @@ sub checkParams {
     {
         if(($options{'identity'} <= 0) || ($options{'identity'} > 1))
         {
-            die "Identity must be an integer greater than 0 and  no greater than 1\n";
+            die "Identity must be an integer greater than 0 and no greater than 1\n";
         }
     }
     #if(!exists $options{''} ) { print "**ERROR: \n"; exec("pod2usage $0"); }
@@ -805,6 +811,19 @@ print<<"EOF";
 EOF
 }
 
+sub overrideDefault
+{
+    #-----
+    # Set and override default values for parameters
+    #
+    my ($default_value, $option_name) = @_;
+    if(exists $options->{$option_name}) 
+    {
+        return $options->{$option_name};
+    }
+    return $default_value;
+}
+
 __DATA__
 
 =head1 NAME
@@ -813,7 +832,7 @@ __DATA__
 
 =head1 COPYRIGHT
 
-   copyright (C) 2011 Michael Imelfort and Paul Dennis
+   copyright (C) 2011 Michael Imelfort and Paul Dennis, 2012 Connor Skennerton
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -834,11 +853,14 @@ __DATA__
 
 =head1 SYNOPSIS
 
-    app_make_results.pl -c|config CONFIG_FILE [-help|h]
+    app_make_results.pl -c|config CONFIG_FILE [-help|h] [-b|blast FILE] [-t|taxonomy FILE] [-i|imputed FILE]
 
       -c CONFIG_FILE               App config file to be processed
       [-i identity VALUE]          Set blast identity [default: 97%]
       [-e EVALUE]                  Set e-value for blast (assign taxonomy) [default 0.001]
+      [-b FILE]                    Path to a custom blast database
+      [-t FILE]                    Path to a custom taxonomy for otus
+      [-i FILE]                    Path to a custom imputed file
       [-help -h]                   Displays basic usage information
          
 =cut
