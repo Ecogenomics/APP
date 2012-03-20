@@ -66,7 +66,7 @@ while(<$in>) {
         next;
     }
     my @c = split(/\t/);
-    my @l = split(/;*\w__/,$c[-1]);
+    my @l = split(/;\w_{1,2}|;/,$c[-1]);
     for (my $i = 1; $i < (scalar @c) - 1; $i++) {
         $out_fh[$i- 1]->print( "$c[$i]\t", join("\t",@l), "\n");
     }
