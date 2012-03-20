@@ -255,6 +255,12 @@ our $global_R_log_file = "UNSET";
 ######################################################################
 # SHARED SUBS
 ######################################################################
+sub checkFileExists {
+    my $file = shift;
+    unless(-e $file) {
+        die "ERROR!\n\nCannot find:\n$file\n";
+    }
+}
 
 sub getWorkingDirs
 {

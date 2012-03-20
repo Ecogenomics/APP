@@ -129,6 +129,12 @@ $TAX_tax_file = &overrideDefault($TAX_tax_file, "taxonomy");
 $TAX_blast_file = &overrideDefault($TAX_blast_file, "blast");
 $imputed_file = &overrideDefault($imputed_file, "imputed");
 
+#### Sanity checks for the input files
+&checkFileExists($TAX_tax_file));
+&checkFileExists("$TAX_blast_file.nsq"));
+&checkFileExists("$TAX_blast_file.nin"));
+&checkFileExists("$TAX_blast_file.nhr"));
+
 
 #### Start the results pipeline!
 print "All good!\n";
@@ -144,30 +150,41 @@ print "----------------------------------------------------------------\n";
 print "Start TABLE BASED NORMALISATION data set processing...\n";
 print "----------------------------------------------------------------\n";
 print "Copying reads for analysis...\n";
+&checkFileExists("$global_QA_dir/$global_acacia_output_dir/$ACACIA_out_file");
+
 copy_read_subset("$global_QA_dir/$global_acacia_output_dir/$ACACIA_out_file","$global_TB_processing_dir/$nn_fasta_file");
 
 print "Picking OTUs for non normalised data set...\n";
+&checkFileExists("$global_TB_processing_dir/$nn_fasta_file");
 `pick_otus.py -i $global_TB_processing_dir/$nn_fasta_file -s $global_similarity_setting -o $global_TB_processing_dir/uclust_picked_otus`;
 
 print "Gettting a representitive set...\n";
+&checkFileExists("$global_TB_processing_dir/uclust_picked_otus/$nn_otus_file");
+&checkFileExists("$global_TB_processing_dir/$nn_fasta_file");
 `pick_rep_set.py -i $global_TB_processing_dir/uclust_picked_otus/$nn_otus_file -f $global_TB_processing_dir/$nn_fasta_file`;
 
 # if we are doing OTU_AVERAGE (or if we've ben asked to) then we need to assign taxonomy here
 print "Assigning taxonomy for non normalised data set...\n";
 my $nn_rep_set_fasta = "$global_TB_processing_dir/".$nn_fasta_file."_rep_set.fasta";
+&checkFileExists($nn_rep_set_fasta);
 `assign_taxonomy.py -i $nn_rep_set_fasta -t $TAX_tax_file -b $TAX_blast_file -m blast -e $global_e_value -o $global_TB_processing_dir`;
 
 print "Treeing non normalised data set...\n";
 `align_seqs.py -i $nn_rep_set_fasta -t $imputed_file -p 0.6 -o $global_TB_processing_dir/pynast_aligned`;
 my $nn_rep_set_aligned = "$global_TB_processing_dir/pynast_aligned/".$nn_fasta_file."_rep_set_aligned.fasta";
+&checkFileExists($nn_rep_sep_aligned);
 `filter_alignment.py -i $nn_rep_set_aligned -o $global_TB_processing_dir`;
 my $nn_rep_set_aligned_filtered = "$global_TB_processing_dir/".$nn_fasta_file."_rep_set_aligned_pfiltered.fasta";
+&checkFileExists($nn_rep_set_aligned_filtered);
 `make_phylogeny.py -i $nn_rep_set_aligned_filtered -r midpoint`; 
 my $nn_rep_set_aligned_filtered_tree = "$global_TB_processing_dir/".$nn_fasta_file."_rep_set_aligned_pfiltered.tre";
+&checkFileExists($nn_rep_set_aligned_filtered_tree);
 `mv $nn_rep_set_aligned_filtered_tree $nn_tree_file`;
 
 print "Making NON NORMALISED otu table...\n";
 my $nn_rep_set_tax_assign = "$global_TB_processing_dir/".$nn_fasta_file."_rep_set_tax_assignments.txt";
+&checkFileExists($nn_rep_set_tax_assign);
+&checkFileExists("$global_TB_processing_dir/uclust_picked_otus/$nn_otus_file");
 `make_otu_table.py -i $global_TB_processing_dir/uclust_picked_otus/$nn_otus_file -t $nn_rep_set_tax_assign -o $nn_otu_table_file`;
 
 # do rarefaction for unnormalised data
@@ -769,7 +786,7 @@ sub parse_config_results
 # TEMPLATE SUBS
 ######################################################################
 sub checkParams {
-    my @standard_options = ( "help|h+", "config|c:s", "identity|i:i", "e:i", "b|blast:s", "t|taxonomy:s");
+    my @standard_options = ( "help|h+", "config|c:s", "identity|i:i", "e:i", "b|blast:s", "t|taxonomy:s", "i|imputed:s");
     my %options;
 
     # Add any other command line options, and the code to handle them
