@@ -261,7 +261,16 @@ sub checkFileExists {
         die "ERROR!\n\nCannot find:\n$file\n";
     }
 }
+sub logExternalCommand {
+    print shift;
+}
 
+sub runExternalComand {
+    my $cmd = shift;
+    logExternalCommand($cmd);
+    system($cmd);
+
+}
 sub getWorkingDirs
 {
     #-----
@@ -313,6 +322,8 @@ sub getWorkingDirs
     $sn_otus_file = $sn_prefix."_otus.txt";
     $sn_tree_file = "$global_SB_results_dir/$sn_prefix"."_tree.tre";    
 }
+
+
 
 sub makeOutputDirs
 {
