@@ -131,10 +131,10 @@ $TAX_blast_file = &overrideDefault($TAX_blast_file, "blast");
 $imputed_file = &overrideDefault($imputed_file, "imputed");
 
 #### Sanity checks for the input files
-&checkFileExists($TAX_tax_file));
-&checkFileExists("$TAX_blast_file.nsq"));
-&checkFileExists("$TAX_blast_file.nin"));
-&checkFileExists("$TAX_blast_file.nhr"));
+&checkFileExists($TAX_tax_file);
+&checkFileExists("$TAX_blast_file.nsq");
+&checkFileExists("$TAX_blast_file.nin");
+&checkFileExists("$TAX_blast_file.nhr");
 
 
 #### Start the results pipeline!
@@ -173,7 +173,7 @@ my $nn_rep_set_fasta = "$global_TB_processing_dir/".$nn_fasta_file."_rep_set.fas
 print "Treeing non normalised data set...\n";
 &runExternalComand("align_seqs.py -i $nn_rep_set_fasta -t $imputed_file -p 0.6 -o $global_TB_processing_dir/pynast_aligned");
 my $nn_rep_set_aligned = "$global_TB_processing_dir/pynast_aligned/".$nn_fasta_file."_rep_set_aligned.fasta";
-&checkFileExists($nn_rep_sep_aligned);
+&checkFileExists($nn_rep_set_aligned);
 &runExternalComand("filter_alignment.py -i $nn_rep_set_aligned -o $global_TB_processing_dir");
 my $nn_rep_set_aligned_filtered = "$global_TB_processing_dir/".$nn_fasta_file."_rep_set_aligned_pfiltered.fasta";
 &checkFileExists($nn_rep_set_aligned_filtered);

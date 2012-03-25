@@ -88,6 +88,8 @@ our @EXPORT=qw(
     $SILVA_TAX_blast_file
     $SILVA_imputed_file 
     $global_R_log_file
+    checkFileExists
+    runExternalComand
     getWorkingDirs 
     makeOutputDirs 
     makeResultsDirs
@@ -262,7 +264,7 @@ sub checkFileExists {
     }
 }
 sub logExternalCommand {
-    print shift;
+    print shift, "\n";
 }
 
 sub runExternalComand {
