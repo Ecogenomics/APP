@@ -61,6 +61,7 @@ our @EXPORT=qw(
     $global_SB_results_dir
     $ACACIA_out_file
     $tn_log_file
+    $tn_R_log_file
     $sn_log_file
     $tn_dist_file
     $sn_dist_file
@@ -88,6 +89,9 @@ our @EXPORT=qw(
     $SILVA_TAX_blast_file
     $SILVA_imputed_file 
     $global_R_log_file
+    checkFileExists
+    runExternalCommand
+    logExternalCommand
     getWorkingDirs 
     makeOutputDirs 
     makeResultsDirs
@@ -228,6 +232,7 @@ our $global_TB_results_dir = "UNSET";
 our $global_SB_results_dir = "UNSET";
 
 our $tn_log_file = "UNSET";
+our $tn_R_log_file = "UNSET";
 our $sn_log_file = "UNSET";
 our $tn_dist_file = "UNSET";
 our $sn_dist_file = "UNSET";
@@ -255,6 +260,21 @@ our $global_R_log_file = "UNSET";
 ######################################################################
 # SHARED SUBS
 ######################################################################
+sub checkFileExists {
+    my $file = shift;
+    unless(-e $file) {
+        die "ERROR!\n\nCannot find:\n$file\n";
+    }
+}
+sub logExternalCommand {
+    print shift, "\n";
+}
+
+sub runExternalCommand {
+    my $cmd = shift;
+    logExternalCommand($cmd);
+    system($cmd);
+}
 
 sub getWorkingDirs
 {
@@ -290,6 +310,7 @@ sub getWorkingDirs
     $global_TB_results_dir = "$global_results_dir/table_based";
     $global_SB_results_dir = "$global_results_dir/sequence_based";
     $tn_log_file = "$global_TB_results_dir/otu_table_normalisation.log";
+    $tn_R_log_file = "$global_TB_results_dir/otu_table_normalisation_R_commands.log";
     $sn_log_file = "$global_SB_results_dir/sequence_normalisation.log";
     $tn_dist_file = "$global_TB_processing_dir/otu_table_normalisation_dist.txt";
     $sn_dist_file = "$global_SB_processing_dir/sequence_normalisation_dist.txt";
