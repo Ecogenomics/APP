@@ -28,6 +28,9 @@ use File::Basename;
 
 our @ISA = qw(Exporter);
 our @EXPORT=qw(
+    IGNORE_FAILURE
+    WARN_ON_FAILURE
+    DIE_ON_FAILURE
     %FNB 
     %FNA 
     $FNB_HEADER 
@@ -90,6 +93,7 @@ our @EXPORT=qw(
     $SILVA_imputed_file 
     $global_R_log_file
     checkFileExists
+    check_and_run_command
     runExternalCommand
     logExternalCommand
     getWorkingDirs 
@@ -103,6 +107,13 @@ our @EXPORT=qw(
     parseConfigQA 
     updateConfigQA
     );
+
+# Failure modes when executing a command
+use constant {
+    IGNORE_FAILURE => 0,
+    WARN_ON_FAILURE => 1,
+    DIE_ON_FAILURE => 2
+};
 
 #
 # A file is created in PyroDB which can be used to split the sff file and 
@@ -276,12 +287,44 @@ sub runExternalCommand {
     system($cmd);
 }
 
+sub check_and_run_command {
+    my $cmd = shift;
+    my $params = shift;
+    my $failure_type = shift;
+    
+    if (system("which $cmd")) {
+        handle_command_failure($cmd, $failure_type)
+    }
+    
+    my $param_str = join " ", map { $_ . " " . $params->{$_}} keys %{$params};
+    my $cmd_str = $cmd . " " . $param_str;
+    
+    logExternalCommand($cmd_str);
+    
+    if (system($cmd_str)) {
+         handle_command_failure($cmd_str, $failure_type)
+    }
+}
+
+sub handle_command_failure {
+    my $cmd = shift;
+    my $failure_type = shift;
+    if (defined($failure_type)) {
+        if ($failure_type == DIE_ON_FAILURE) {
+            die "ERROR: " . $! . "\n";
+        } elsif ($failure_type == WARN_ON_FAILURE) {
+            die "WARNING: " . $! . "\n";
+        }
+    }
+}
+
+
 sub getWorkingDirs
 {
     #-----
     # Set a number of output directories
     #
-    my ($config_prefix) = @_;
+    my ($base_directory, $results_output_dir) = @_;
     
     # get the acacia denoised directory
     my $acc_dir_raw = `grep OUTPUT_DIR $global_acacia_config`;
@@ -294,17 +337,16 @@ sub getWorkingDirs
     # get the present dir
     my $pwd = `pwd`;
     chomp $pwd;
-    $global_working_dir = dirname("$pwd/$config_prefix");
-    print $global_working_dir."\n"; 
+    my $global_working_dir = dirname("$pwd/$base_directory");
     
     # set the mapping file
     $global_mapping_file = "$global_working_dir/$QA_dir/$QIIME_map_file";
     
     # now we set these guys
     $global_QA_dir = "$global_working_dir/$QA_dir";
-    $global_processing_dir = "$global_working_dir/$proc_dir";
-    $global_results_dir = "$global_working_dir/$res_dir";
-    $global_image_dir = "$global_working_dir/$image_dir";
+    $global_processing_dir = "$results_output_dir/$proc_dir";
+    $global_results_dir = "$results_output_dir/$res_dir";
+    $global_image_dir = "$results_output_dir/$image_dir";
     $global_TB_processing_dir = "$global_processing_dir/table_based";
     $global_SB_processing_dir = "$global_processing_dir/sequence_based";
     $global_TB_results_dir = "$global_results_dir/table_based";
