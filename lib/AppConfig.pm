@@ -313,7 +313,7 @@ sub handle_command_failure {
         if ($failure_type == DIE_ON_FAILURE) {
             die "ERROR: " . $! . "\n";
         } elsif ($failure_type == WARN_ON_FAILURE) {
-            die "WARNING: " . $! . "\n";
+            warn "WARNING: " . $! . "\n";
         }
     }
 }
