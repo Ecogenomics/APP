@@ -25,6 +25,8 @@
 package AppConfig;
 require Exporter;
 use File::Basename;
+use File::Temp qw(tempfile);
+use Carp;
 
 our @ISA = qw(Exporter);
 our @EXPORT=qw(
@@ -86,14 +88,16 @@ our @EXPORT=qw(
     $QIIME_split_out_qual
     $QIIME_TAX_tax_file
     $QIIME_TAX_blast_file
+    $QIIME_TAX_aligned_blast_file
     $QIIME_map_file
     $QIIME_imputed_file 
     $SILVA_TAX_tax_file
     $SILVA_TAX_blast_file
+    $SILVA_TAX_aligned_blast_file
     $SILVA_imputed_file 
     $global_R_log_file
     checkFileExists
-    check_and_run_command
+    checkAndRunCommand
     runExternalCommand
     logExternalCommand
     getWorkingDirs 
@@ -106,6 +110,8 @@ our @EXPORT=qw(
     getReadCounts 
     parseConfigQA 
     updateConfigQA
+    updateAcaciaConfigHash
+    returnAcaciaConfigString
     );
 
 # Failure modes when executing a command
@@ -190,9 +196,36 @@ our $global_working_dir = "UNSET";
 our $global_mapping_file = "UNSET";
 
 #
-# We use a number of config files which are located all over the place. Just in case we move them., we can store them here...
+# Here we keep the default acacia config hash
 #
-our $global_acacia_config = "/srv/whitlam/bio/apps/sw/app/APP/app_acacia.config";
+
+our %acacia_config_hash = (
+     ANY_DIFF_SIGNIFICANT_FOR_TWO_SEQS => "TRUE",
+     AVG_QUALITY_CUTOFF => 30,
+     ERROR_MODEL => "Balzer",
+     FASTA => "TRUE",
+     FASTA_LOCATION => "good.fasta",
+     FASTQ => "FALSE",
+     FASTQ_LOCATION => "null",
+     FILTER_N_BEFORE_POS => 350,
+     FLOW_KEY => "TCAG",
+     MAXIMUM_MANHATTAN_DISTANCE => 13,
+     MAX_RECURSE_DEPTH => 2,
+     MAX_STD_DEV_LENGTH => 2,
+     MID_FILE => ".dummmy",
+     MID_OPTION => "NO_MID",
+     MIN_FLOW_TRUNCATION => 150,
+     MIN_READ_REP_BEFORE_TRUNCATION => 0.0,
+     OUTPUT_DIR => "denoised_acacia",
+     OUTPUT_PREFIX => "acacia_out",
+     QUAL_LOCATION => "null",
+     REPRESENTATIVE_SEQUENCE => "Mode",
+     SIGNIFICANCE_LEVEL => -9,
+     SPLIT_ON_MID => "FALSE",
+     TRIM_TO_LENGTH => 230,
+     TRUNCATE_READ_TO_FLOW => ""
+);
+
 our $global_barcode_length = "variable_length";
 
 #
@@ -205,9 +238,11 @@ our $QIIME_split_out = "seqs.fna";
 our $QIIME_split_out_qual = "seqs_filtered.qual";
 our $QIIME_TAX_tax_file = "$QIIME_GG_TAX_ROOT/taxonomies/greengenes_tax.txt";
 our $QIIME_TAX_blast_file = "$QIIME_GG_TAX_ROOT/rep_set/gg_99_otus_4feb2011.fasta";
+our $QIIME_TAX_aligned_blast_file = "$QIIME_GG_TAX_ROOT/rep_set/gg_99_otus_4feb2011_aligned.fasta";
 our $QIIME_imputed_file = "/srv/whitlam/bio/db/gg/qiime_default/core_set_aligned.fasta.imputed";
 our $SILVA_TAX_tax_file = "/srv/whitlam/bio/db/Silva/QIIME_files/taxonomy_mapping/Silva_taxa_mapping_104set_97_otus.txt";
 our $SILVA_TAX_blast_file = "/srv/whitlam/bio/db/Silva/QIIME_files/rep_set/silva_104_rep_set.fasta";
+our $SILVA_TAX_aligned_blast_file = "/srv/whitlam/bio/db/Silva/QIIME_files/rep_set/silva_104_rep_set_aligned.fasta";
 our $SILVA_imputed_file = "/srv/whitlam/bio/db/Silva/QIIME_files/core_aligned_set/core_Silva_aligned.fasta";
 our $CHIME_good_file = "good.fasta";
 our $CHIME_bad_file = "ch.fasta";
@@ -278,7 +313,7 @@ sub checkFileExists {
     }
 }
 sub logExternalCommand {
-    print shift, "\n";
+    print "\t", shift, "\n\n";
 }
 
 sub runExternalCommand {
@@ -287,33 +322,66 @@ sub runExternalCommand {
     system($cmd);
 }
 
-sub check_and_run_command {
-    my $cmd = shift;
-    my $params = shift;
-    my $failure_type = shift;
-    
-    if (system("which $cmd")) {
-        handle_command_failure($cmd, $failure_type)
-    }
-    
-    my $param_str = join " ", map { $_ . " " . $params->{$_}} keys %{$params};
-    my $cmd_str = $cmd . " " . $param_str;
-    
-    logExternalCommand($cmd_str);
-    
-    if (system($cmd_str)) {
-         handle_command_failure($cmd_str, $failure_type)
+sub isCommandInPath
+{
+    #-----
+    # Is this command in the path?
+    #
+    my ($cmd, $failure_type) = @_;
+    if (system("which $cmd |> /dev/null")) {
+        handleCommandFailure($cmd, $failure_type);
     }
 }
 
-sub handle_command_failure {
-    my $cmd = shift;
-    my $failure_type = shift;
+sub checkAndRunCommand
+{
+    #-----
+    # Run external commands more sanelier
+    #
+    my ($cmd, $params, $failure_type) = @_;
+    
+    isCommandInPath($cmd, $failure_type);
+    
+    # join the parameters to the command
+    my $param_str = join " ", map {formatParams($_)} @{$params};
+    
+    my $cmd_str = $cmd . " " . $param_str;
+    
+    logExternalCommand($cmd_str);
+
+    if (system($cmd_str)) {
+        handleCommandFailure($cmd_str, $failure_type)
+    }
+}
+
+sub formatParams {
+
+    #---------
+    # Handles and formats the different ways of passing parameters to 
+    # checkAndRunCommand
+    #
+    my $ref = shift;
+    
+    if (ref($ref) eq "ARRAY") {
+        return join(" ", @{$ref});
+    } elsif (ref($ref) eq "HASH") {
+        return join(" ", map { $_ . " " . $ref->{$_}} keys %{$ref});
+    }
+    croak 'The elements of the $params argument in checkAndRunCommand can ' .
+        'only contain references to arrays or hashes\n';
+}
+
+
+sub handleCommandFailure {
+    #-----
+    # What to do when all goes bad!
+    #
+    my ($cmd, $failure_type) = @_;
     if (defined($failure_type)) {
         if ($failure_type == DIE_ON_FAILURE) {
-            die "ERROR: " . $! . "\n";
+            croak "**ERROR: $0 : " . $! . "\n";
         } elsif ($failure_type == WARN_ON_FAILURE) {
-            warn "WARNING: " . $! . "\n";
+            carp "**WARNING: $0 : " . $! . "\n";
         }
     }
 }
@@ -327,21 +395,17 @@ sub getWorkingDirs
     my ($base_directory, $results_output_dir) = @_;
     
     # get the acacia denoised directory
-    my $acc_dir_raw = `grep OUTPUT_DIR $global_acacia_config`;
-    chomp $acc_dir_raw;
-    my @acc_dir_fields = split /=/, $acc_dir_raw;
-    $global_acacia_output_dir = $acc_dir_fields[1];
+    $global_acacia_output_dir = $acacia_config_hash{'OUTPUT_DIR'};
 
     # Get the working dir
     # working dir is the dir of the config file
     # get the present dir
     my $pwd = `pwd`;
     chomp $pwd;
-    my $global_working_dir = dirname("$pwd/$base_directory");
+    $global_working_dir = dirname("$pwd/$base_directory");
     
     # set the mapping file
     $global_mapping_file = "$global_working_dir/$QA_dir/$QIIME_map_file";
-    
     # now we set these guys
     $global_QA_dir = "$global_working_dir/$QA_dir";
     $global_processing_dir = "$results_output_dir/$proc_dir";
@@ -351,8 +415,8 @@ sub getWorkingDirs
     $global_SB_processing_dir = "$global_processing_dir/sequence_based";
     $global_TB_results_dir = "$global_results_dir/table_based";
     $global_SB_results_dir = "$global_results_dir/sequence_based";
-    $tn_log_file = "$global_TB_results_dir/otu_table_normalisation.log";
-    $tn_R_log_file = "$global_TB_results_dir/otu_table_normalisation_R_commands.log";
+    $tn_log_file = "$global_TB_results_dir/otu_table_normalisation.stats";
+    $tn_R_log_file = "$global_TB_processing_dir/otu_table_normalisation_R_commands.log";
     $sn_log_file = "$global_SB_results_dir/sequence_normalisation.log";
     $tn_dist_file = "$global_TB_processing_dir/otu_table_normalisation_dist.txt";
     $sn_dist_file = "$global_SB_processing_dir/sequence_normalisation_dist.txt";
@@ -360,15 +424,15 @@ sub getWorkingDirs
     $nn_fasta_file = $nn_prefix.".fa";
     $nn_otus_file = $nn_prefix."_otus.txt";
     $nn_otu_table_file = "$global_TB_results_dir/$nn_prefix"."_otu_table.txt";
-    $nn_tree_file = "$global_TB_results_dir/$nn_prefix"."_tree.tre";
+    $nn_tree_file = $nn_prefix."_tree.tre";
     $tn_prefix = "table_normalised";
     $tn_otu_table_file = "$global_TB_results_dir/$tn_prefix"."_otu_table.txt";
-    $tn_tree_file = "$global_TB_results_dir/$tn_prefix"."_tree.tre";
+    $tn_tree_file = "$tn_prefix"."_tree.tre";
     $sn_prefix = "sequence_normalised";
     $sn_fasta_file = $sn_prefix.".fa";
     $sn_otu_table_file = "$global_SB_results_dir/$sn_prefix"."_otu_table.txt";
     $sn_otus_file = $sn_prefix."_otus.txt";
-    $sn_tree_file = "$global_SB_results_dir/$sn_prefix"."_tree.tre";    
+    $sn_tree_file = "$sn_prefix"."_tree.tre";    
 }
 
 sub makeOutputDirs
@@ -379,8 +443,6 @@ sub makeOutputDirs
     my ($job_dir) = @_;
     `mkdir -p $global_working_dir$job_dir/$QA_dir`;
     `mkdir -p $global_working_dir$job_dir/$QA_dir/$global_acacia_output_dir`;
-    `mkdir -p $global_working_dir$job_dir/$proc_dir`;
-    `mkdir -p $global_working_dir$job_dir/$res_dir`;
 }
 
 sub makeResultsDirs
@@ -416,7 +478,14 @@ sub splitLibraries
     #
     my ($job_ID) = @_;
     print "Splitting libraries...\n";
-    `split_libraries.py -m $QIIME_map_file -f ../$job_ID.fna -q ../$job_ID.qual -b $global_barcode_length -a 2 -H 10 -M 1 -d`;
+    checkAndRunCommand("split_libraries.py", [{-m => $QIIME_map_file,
+                                               -f => "../$job_ID.fna",
+                                               -q => "../$job_ID.qual",
+                                               -b => $global_barcode_length,
+                                               -a => 2,
+                                               -H => 10,
+                                               -M => 1,
+                                               -d => ''}], DIE_ON_FAILURE);
 }
 
 sub removeChimeras
@@ -425,7 +494,10 @@ sub removeChimeras
     # Remove chimeras using uclust
     #
     print "Removing chimeras...\n";
-    `usearch --uchime seqs.fna --db $QIIME_TAX_blast_file --nonchimeras $CHIME_good_file --chimeras $CHIME_bad_file`;
+    checkAndRunCommand("usearch", [{'--uchime' => "seqs.fna",
+                                               '--db' => $QIIME_TAX_blast_file,
+                                               '--nonchimeras' => $CHIME_good_file,
+                                               '--chimeras' => $CHIME_bad_file}], DIE_ON_FAILURE);
 }
 
 sub denoise
@@ -433,10 +505,45 @@ sub denoise
     #-----
     # run acacia on the data
     #
+    my ($param) = @_;
+    
+    # Create a temporary file to dump the config
+    my ($tmp_fh, $config_filename) = tempfile("acacia_XXXXXXXX", UNLINK => 1);
+    
+    # Unbuffer the output of $tmp_fh
+    select($tmp_fh);
+    $| = 1;
+    select(STDOUT);
+    
+    # Write to the temporary acacia config file
+    print {$tmp_fh} returnAcaciaConfigString();
+        
     print "Denoising using acacia...\n";
-#    `java -XX:+UseConcMarkSweepGC -Xmx10G -jar \$ACACIA -c $global_acacia_config`;
-    `java -XX:+UseConcMarkSweepGC -Xmx10G -jar \$ACACIA -c $global_acacia_config`;
+    
+    # Because acacia's return value is 1 on success (instead of the traditional
+    # zero), we need to ignore on failure and test if the stats file was written
+    # to
+    my $params_array = [["-XX:+UseConcMarkSweepGC",
+                         "-Xmx10G"],
+                         {-jar => '$ACACIA'},
+                         {-c => $config_filename}];
+    
+    checkAndRunCommand("java", $params_array, IGNORE_ON_FAILURE);
+    
+    my $stats_file = $acacia_config_hash{OUTPUT_DIR} . "/" .
+        $acacia_config_hash{OUTPUT_PREFIX} . "_all_tags.stats";
+    
+    # If the stats file doesn't exist or is zero size, die and raise an error.
+    if ((! -e $stats_file) || (-z $stats_file)) {
+        my $cmd = formatParams($params_array);    
+        handleCommandFailure($cmd, DIE_ON_FAILURE);
+    }
+    #`java -XX:+UseConcMarkSweepGC -Xmx10G -jar \$ACACIA -c $config_filename`;
     #`sed -i -e "s/all_tags_[^ ]* //" $global_acacia_output_dir/$ACACIA_out_file`;
+    
+    # Close the handle to the temp file, perl will handle deleting.
+    print "Closing temp file..\n";
+    close($tmp_fh);
 }
 
 sub getReadCounts
@@ -504,7 +611,7 @@ sub getReadCounts
             }
         }
     }
-}
+} 
 
 sub parseConfigQA
 {
@@ -568,5 +675,30 @@ sub updateConfigQA
     `$mv_string`;
 }
 
+sub updateAcaciaConfigHash {
+    my ($config_file) = @_;
+    open(my $fh, "<", $config_file);
+    while (my $line = <$fh>) {
+        if ($line =~ /^(.*)=(.*)$/) {
+            $acacia_config_hash{$1} = $2;
+        }
+    }
+    close($fh);
+}
+
+sub returnAcaciaConfigString {
+    #-----
+    # return the Acacia config as a string (for writing to a file)
+    #
+    use Data::Dumper;
+    my ($config_hash_ref) = @_;
+    my %config_hash;
+    if (! defined($config_hash_ref)) {
+        %config_hash = %acacia_config_hash;
+    } else {
+        %config_hash = %{$config_hash_ref};
+    };
+    return join("\n", map({$_ ."=" .$config_hash{$_}} sort {$a cmp $b} keys %config_hash));
+}
 
 1;

@@ -134,20 +134,34 @@ if($global_JN_file_count > $global_norm_num_reps) { $global_JN_file_count = $glo
 if(exists $options->{'identity'}) { $global_similarity_setting = $options->{'identity'}; }
 if(exists $options->{'e'}) { $global_e_value = $options->{'e'}; }
 
-print "Checking is all the config checks out...\t\t";
+print "Checking if all the config checks out...\t\t";
 parse_config_results();
 
 # update our databases (GG by default)
 my $TAX_tax_file = $QIIME_TAX_tax_file;
 my $TAX_blast_file = $QIIME_TAX_blast_file;
+my $TAX_aligned_blast_file = $QIIME_TAX_aligned_blast_file;
 my $imputed_file = $QIIME_imputed_file;
 
 if($global_comp_DB_type eq "SILVA")
 {
     $TAX_tax_file = $SILVA_TAX_tax_file;
     $TAX_blast_file = $SILVA_TAX_blast_file;
+    $TAX_aligned_blast_file = $SILVA_TAX_aligned_blast_file;
     $imputed_file = $SILVA_imputed_file;
 }
+
+#### Check the user options and override if required
+
+$TAX_tax_file = overrideDefault($TAX_tax_file, "taxonomy");
+$TAX_blast_file = overrideDefault($TAX_blast_file, "blast");
+$imputed_file = overrideDefault($imputed_file, "imputed");
+
+#### Sanity checks for the input files
+checkFileExists($TAX_tax_file);
+checkFileExists("$TAX_blast_file.nsq");
+checkFileExists("$TAX_blast_file.nin");
+checkFileExists("$TAX_blast_file.nhr");
 
 #### Start the results pipeline!
 print "All good!\n";
@@ -165,122 +179,87 @@ print "----------------------------------------------------------------\n";
 print "Copying reads for analysis...\n";
 copy_read_subset("$global_QA_dir/$global_acacia_output_dir/$ACACIA_out_file","$global_TB_processing_dir/$nn_fasta_file");
 
+print "Beginning OTU and Taxonomy module...\n";
 print "Picking OTUs for non normalised data set...\n";
-&checkFileExists("$global_TB_processing_dir/$nn_fasta_file");
-check_and_run_command("pick_otus.py", {-i => "$global_TB_processing_dir/$nn_fasta_file",
-                                       -s => "$global_similarity_setting",
-                                       -o => "$global_TB_processing_dir/uclust_picked_otus"}, DIE_ON_FAILURE);
+checkFileExists("$global_TB_processing_dir/$nn_fasta_file");
+checkAndRunCommand("pick_otus.py", [{-i => "$global_TB_processing_dir/$nn_fasta_file",
+                                        -s => "$global_similarity_setting",
+                                        -o => "$global_TB_processing_dir/uclust_picked_otus"}], DIE_ON_FAILURE);
 
 print "Getting a representative set...\n";
-&checkFileExists("$global_TB_processing_dir/uclust_picked_otus/$nn_otus_file");
-&checkFileExists("$global_TB_processing_dir/$nn_fasta_file");
+checkFileExists("$global_TB_processing_dir/uclust_picked_otus/$nn_otus_file");
+checkFileExists("$global_TB_processing_dir/$nn_fasta_file");
 
-check_and_run_command("pick_rep_set.py", {-i => "$global_TB_processing_dir/uclust_picked_otus/$nn_otus_file",
-                                          -f => "$global_TB_processing_dir/$nn_fasta_file"}, DIE_ON_FAILURE);
+checkAndRunCommand("pick_rep_set.py", [{-i => "$global_TB_processing_dir/uclust_picked_otus/$nn_otus_file",
+                                        -f => "$global_TB_processing_dir/$nn_fasta_file"}], DIE_ON_FAILURE);
                       
 
 # if we are doing OTU_AVERAGE (or if we've ben asked to) then we need to assign taxonomy here
 print "Assigning taxonomy for non normalised data set...\n";
 my $nn_rep_set_fasta = "$global_TB_processing_dir/".$nn_fasta_file."_rep_set.fasta";
-&checkFileExists($nn_rep_set_fasta);
-check_and_run_command("assign_taxonomy.py", {-i => $nn_rep_set_fasta,
-                                             -t => $TAX_tax_file,
-                                             -b => $TAX_blast_file,
-                                             -m => "blast",
-                                             -a => 5,
-                                             -e => $global_e_value,
-                                             -o => $global_TB_processing_dir}, DIE_ON_FAILURE);
-
-print "Treeing non normalised data set...\n";
-check_and_run_command("align_seqs.py", {-i => $nn_rep_set_fasta,
-                                        -t => $imputed_file,
-                                        -p => 0.6,
-                                        -o => "$global_TB_processing_dir/pynast_aligned"}, DIE_ON_FAILURE);
-
-my $nn_rep_set_aligned = "$global_TB_processing_dir/pynast_aligned/".$nn_fasta_file."_rep_set_aligned.fasta";
-&checkFileExists($nn_rep_set_aligned);
-check_and_run_command("filter_alignment.py", {-i => $nn_rep_set_aligned,
-                                              -o => $global_TB_processing_dir}, DIE_ON_FAILURE);
-
-my $nn_rep_set_aligned_filtered = "$global_TB_processing_dir/".$nn_fasta_file."_rep_set_aligned_pfiltered.fasta";
-&checkFileExists($nn_rep_set_aligned_filtered);
-check_and_run_command("make_phylogeny.py", {-i => $nn_rep_set_aligned_filtered,
-                                            -r => "midpoint"}, DIE_ON_FAILURE);
-                      
-my $nn_rep_set_aligned_filtered_tree = "$global_TB_processing_dir/".$nn_fasta_file."_rep_set_aligned_pfiltered.tre";
-&checkFileExists($nn_rep_set_aligned_filtered_tree);
-move( $nn_rep_set_aligned_filtered_tree, $nn_tree_file) or die "Move failed $!";
+checkFileExists($nn_rep_set_fasta);
+checkAndRunCommand("assign_taxonomy.py", [{-i => $nn_rep_set_fasta,
+                                              -t => $TAX_tax_file,
+                                              -b => $TAX_blast_file,
+                                              -m => "blast",
+                                              -a => 5,
+                                              -e => $global_e_value,
+                                              -o => $global_TB_processing_dir}], DIE_ON_FAILURE);
 
 print "Making NON NORMALISED otu table...\n";
 my $nn_rep_set_tax_assign = "$global_TB_processing_dir/".$nn_fasta_file."_rep_set_tax_assignments.txt";
-&checkFileExists($nn_rep_set_tax_assign);
-&checkFileExists("$global_TB_processing_dir/uclust_picked_otus/$nn_otus_file");
-check_and_run_command("make_otu_table.py",  {-i => "$global_TB_processing_dir/uclust_picked_otus/$nn_otus_file",
-                                             -t => $nn_rep_set_tax_assign,
-                                             -o => $nn_otu_table_file}, DIE_ON_FAILURE);
+checkFileExists($nn_rep_set_tax_assign);
+checkFileExists("$global_TB_processing_dir/uclust_picked_otus/$nn_otus_file");
+checkAndRunCommand("make_otu_table.py",  [{-i => "$global_TB_processing_dir/uclust_picked_otus/$nn_otus_file",
+                                           -t => $nn_rep_set_tax_assign,
+                                           -o => $nn_otu_table_file}], DIE_ON_FAILURE);
 
-check_and_run_command("reformat_otu_table.py",  {-i => "$nn_otu_table_file",
-                                                 -t => $nn_rep_set_tax_assign,
-                                                 -o => "$nn_otu_table_file.expanded"}, IGNORE_FAILURE);
+print "Making NON NORMALISED otu table (Extended format)...\n";
+checkAndRunCommand("reformat_otu_table.py",  [{-i => "$nn_otu_table_file",
+                                               -t => $nn_rep_set_tax_assign,
+                                               -o => "$nn_otu_table_file.expanded"}], IGNORE_FAILURE);
+
 
 # do rarefaction for unnormalised data
-print "Rarefaction and diversity...\n";
-check_and_run_command("multiple_rarefactions.py", {-i => $nn_otu_table_file,
-                                                   -o => "$global_TB_processing_dir/rarefied_otu_tables/",
-                                                   -m => $global_rare_M,
-                                                   -x => $global_rare_X,
-                                                   -s => $global_rare_S,
-                                                   -n => $global_rare_N}, DIE_ON_FAILURE);
-
-check_and_run_command("alpha_diversity.py", {-i => "$global_TB_processing_dir/rarefied_otu_tables/",
-                                             -t => $nn_tree_file,
-                                             -o => "$global_TB_processing_dir/alpha_div/",
-                                             -m => join(",", qw(chao1
-                                                                chao1_confidence
-                                                                PD_whole_tree
-                                                                observed_species
-                                                                simpson
-                                                                shannon
-                                                                fisher_alpha))}, DIE_ON_FAILURE);
-                                             
-check_and_run_command("collate_alpha.py", {-i => "$global_TB_processing_dir/alpha_div/",
-                                           -o => "$global_TB_processing_dir/alpha_div_collated/"}, DIE_ON_FAILURE);
-
-# make the same image twice (two different formats)
-foreach my $format (("png", "svg")) {
-    check_and_run_command("make_rarefaction_plots.py", {-i => "$global_TB_processing_dir/alpha_div_collated/",
-                                                        -m => "$global_QA_dir/qiime_mapping.txt",
-                                                        -o => "$global_TB_results_dir/alpha_diversity/",
-                                                        "--resolution" => 300,
-                                                        "--imagetype" => $format}, DIE_ON_FAILURE);
-}
+print "Rarefaction...\n";
+checkAndRunCommand("multiple_rarefactions.py", [{-i => $nn_otu_table_file,
+                                                 -o => "$global_TB_processing_dir/rarefied_otu_tables/",
+                                                 -m => $global_rare_M,
+                                                 -x => $global_rare_X,
+                                                 -s => $global_rare_S,
+                                                 -n => $global_rare_N}], DIE_ON_FAILURE);
 
 # normalise the non normalised OTU table
 print "Normalizing non normalised table at $global_norm_sample_size sequences... [$global_norm_sample_size, $global_norm_num_reps]\n";
-check_and_run_command("multiple_rarefactions_even_depth.py", {-i => $nn_otu_table_file,
-                                                              -o => "$global_TB_processing_dir/rare_tables/",
-                                                              -d => $global_norm_sample_size,
-                                                              -n => $global_norm_num_reps,
-                                                              "--lineages_included" => "",
-                                                              "--k" => ""}, DIE_ON_FAILURE);
+checkAndRunCommand("multiple_rarefactions_even_depth.py", [{-i => $nn_otu_table_file,
+                                                            -o => "$global_TB_processing_dir/rare_tables/",
+                                                            -d => $global_norm_sample_size,
+                                                            -n => $global_norm_num_reps},
+                                                            ["--lineages_included"],
+                                                            ["--k"]], DIE_ON_FAILURE);
 
+print "Calculating centroid subsampled table...\n";
 my $centroid_index = find_centroid_table("$global_TB_processing_dir/rare_tables/",
                                          $global_norm_sample_size,
                                          $tn_dist_file,
                                          $tn_log_file,
                                          $tn_R_log_file);
+    
+copy("$global_TB_processing_dir/rare_tables/rarefaction_$global_norm_sample_size"."_$centroid_index".".txt",
+      "$tn_otu_table_file") or die "Copy Failed $!";
 
-copy( "$global_TB_processing_dir/rare_tables/rarefaction_$global_norm_sample_size"."_$centroid_index".".txt", $tn_otu_table_file) or die "Copy Failed $!";
-
-check_and_run_command("reformat_otu_table.py",  {-i => "$tn_otu_table_file",
-                                                 -t => $nn_rep_set_tax_assign,
-                                                 -o => "$tn_otu_table_file.expanded"}, IGNORE_FAILURE);
+print "Reformatting normalised OTU table...\n";
+checkAndRunCommand("reformat_otu_table.py",  [{-i => "$tn_otu_table_file",
+                                               -t => $nn_rep_set_tax_assign,
+                                               -o => "$tn_otu_table_file.expanded"}], IGNORE_FAILURE);
 
 print "Summarizing by taxa.....\n";
-check_and_run_command("summarize_taxa.py", {-i => $tn_otu_table_file,
-                                            -o => "$global_TB_results_dir/breakdown_by_taxonomy/"}, DIE_ON_FAILURE);
+
+checkAndRunCommand("summarize_taxa.py", [{-i => "$tn_otu_table_file",
+                                          -o => "$global_TB_results_dir/breakdown_by_taxonomy/"}], DIE_ON_FAILURE);
 
 # move 100 of the 100 tables just produced into a new folder for jacknifing
+print "Jackknifing in preparation for beta diversity\n";
 my $jack_knife_folder = "$global_TB_processing_dir/rare_tables/JN";
 `mkdir -p $jack_knife_folder`;
 foreach my $jn_file_counter (0..$global_JN_file_count)
@@ -289,40 +268,108 @@ foreach my $jn_file_counter (0..$global_JN_file_count)
     `cp $global_TB_processing_dir/rare_tables/$jn_from_file $jack_knife_folder/`;
 }
 
-print "Jacknifed beta diversity....\n";
-jack_knifing("weighted_unifrac", $nn_otu_table_file, $nn_tree_file, $jack_knife_folder);
-jack_knifing("unweighted_unifrac", $nn_otu_table_file, $nn_tree_file, $jack_knife_folder);
-jack_knifing("euclidean", $nn_otu_table_file, $nn_tree_file, $jack_knife_folder);
-jack_knifing("hellinger", $nn_otu_table_file, $nn_tree_file, $jack_knife_folder);
+mkdir ("$global_TB_processing_dir/blast_substituted_phylogeny/") or die "Unable to make blast_substituted_phylogeny directory.";
 
-# beta for the normalised table
-my @beta_methods = ('weighted_unifrac','unweighted_unifrac','euclidean','hellinger','binary_euclidean','chord');
-foreach my $matrix_type (@beta_methods)
-{    
-    my $params = {-i => $tn_otu_table_file,
-                  -o => "$global_TB_results_dir/beta_diversity/$tn_prefix/$matrix_type",
-                  -m => $matrix_type};
+checkAndRunCommand("generate_fasta_from_taxonomy.py",[{-t => $nn_rep_set_tax_assign,
+                                                       -r => $nn_rep_set_fasta,
+                                                       -b => $TAX_aligned_blast_file,
+                                                       -o => "$global_TB_processing_dir/blast_substituted_phylogeny/non_normalised.fa_rep_set_aligned_pfiltered.fasta"}], DIE_ON_FAILURE);
+
+# We only have to align and filter the de novo phylogeny sequences because the 
+# BLAST substitution will have taken the sequences from the aligned taxonomy file
+# to produce an aligned FASTA
+
+print "Treeing non normalised data set...\n";
+checkAndRunCommand("align_seqs.py", [{-i => $nn_rep_set_fasta,
+                                      -t => $imputed_file,
+                                      -p => 0.6,
+                                      -o => "$global_TB_processing_dir/de_novo_phylogeny/pynast_aligned"}], DIE_ON_FAILURE);
+
+my $nn_rep_set_aligned = "$global_TB_processing_dir/de_novo_phylogeny/pynast_aligned/".$nn_fasta_file."_rep_set_aligned.fasta";
+&checkFileExists($nn_rep_set_aligned);
+checkAndRunCommand("filter_alignment.py", [{-i => $nn_rep_set_aligned,
+                                            -o => "$global_TB_processing_dir/de_novo_phylogeny/"}], DIE_ON_FAILURE);
+
+# From here on in, processing will occur twice, once for the de-novo alignment
+# and another for the blast substituted phylogeny
+#
+my @phylogeny_dirs = ("de_novo_phylogeny", "blast_substituted_phylogeny");
+
+foreach my $phylogeny_dir (@phylogeny_dirs) {  
     
-    # qiime spews when you give it a tree for some methods 
-    if(!($matrix_type =~ /euclid/))
-    {
-        $params->{"-t"} = $nn_tree_file;
+    # Define processing and results directories
+    my $phylogeny_proc_dir = "$global_TB_processing_dir/$phylogeny_dir";
+    my $phylogeny_results_dir = "$global_TB_results_dir/$phylogeny_dir";
+    
+    my $nn_rep_set_aligned_filtered = "$phylogeny_proc_dir/".$nn_fasta_file."_rep_set_aligned_pfiltered.fasta";
+    &checkFileExists($nn_rep_set_aligned_filtered);
+    checkAndRunCommand("make_phylogeny.py", [{-i => $nn_rep_set_aligned_filtered,
+                                              -r => "midpoint"}], DIE_ON_FAILURE);
+
+    my $nn_rep_set_aligned_filtered_tree = "$phylogeny_proc_dir/$nn_fasta_file"."_rep_set_aligned_pfiltered.tre";
+    &checkFileExists($nn_rep_set_aligned_filtered_tree);
+    move( $nn_rep_set_aligned_filtered_tree, "$phylogeny_proc_dir/$nn_tree_file") or die "Move failed $!";
+
+    print "Calculating alpha-diversity metrics...\n";
+    checkAndRunCommand("alpha_diversity.py", [{-i => "$global_TB_processing_dir/rarefied_otu_tables/",
+                                               -t => "$phylogeny_proc_dir/$nn_tree_file",
+                                               -o => "$phylogeny_proc_dir/alpha_div/",
+                                               -m => join(",", qw(chao1
+                                                                  chao1_confidence
+                                                                  PD_whole_tree
+                                                                  observed_species
+                                                                  simpson
+                                                                  shannon
+                                                                  fisher_alpha))}], DIE_ON_FAILURE);                                                       
+                                                           
+    checkAndRunCommand("collate_alpha.py", [{-i => "$phylogeny_proc_dir/alpha_div/",
+                                             -o => "$phylogeny_proc_dir/alpha_div_collated/"}], DIE_ON_FAILURE);
+    
+    # make the same image twice (two different formats)
+    foreach my $format (("png", "svg")) {
+        checkAndRunCommand("make_rarefaction_plots.py", [{-i => "$phylogeny_proc_dir/alpha_div_collated/",
+                                                          -m => "$global_QA_dir/qiime_mapping.txt",
+                                                          -o => "$phylogeny_results_dir/alpha_diversity/",
+                                                          "--resolution" => 300,
+                                                          "--imagetype" => $format}], DIE_ON_FAILURE);
     }
     
-    check_and_run_command("beta_diversity.py", $params, DIE_ON_FAILURE);
+    print "Jacknifed beta diversity....\n";
+    jack_knifing("weighted_unifrac", $nn_otu_table_file, "$phylogeny_proc_dir/$nn_tree_file", $jack_knife_folder, $phylogeny_results_dir);
+    jack_knifing("unweighted_unifrac", $nn_otu_table_file, "$phylogeny_proc_dir/$nn_tree_file", $jack_knife_folder, $phylogeny_results_dir);
+    jack_knifing("euclidean", $nn_otu_table_file, "$phylogeny_proc_dir/$nn_tree_file", $jack_knife_folder, $phylogeny_results_dir);
+    jack_knifing("hellinger", $nn_otu_table_file, "$phylogeny_proc_dir/$nn_tree_file", $jack_knife_folder, $phylogeny_results_dir);
 
-    
-    my $beta_file = $matrix_type."_".$tn_prefix."_otu_table.txt";
-    my $upgma_file = $matrix_type."_".$tn_prefix."_otu_table_upgma.tre";
-    my $pcoa_file = $matrix_type."_".$tn_prefix."_pcoa.txt";
 
-    # Perform UPGMA clustering on rarefied distance matrices 
-    check_and_run_command("upgma_cluster.py", {-i => "$global_TB_results_dir/beta_diversity/$tn_prefix/$matrix_type/$beta_file",
-                                               -o => "$global_TB_results_dir/beta_diversity/$tn_prefix/$matrix_type/$upgma_file"}, DIE_ON_FAILURE);    
+    # beta for the normalised table
+    my @beta_methods = ('weighted_unifrac','unweighted_unifrac','euclidean','hellinger','binary_euclidean','chord');
+    foreach my $matrix_type (@beta_methods)
+    {    
+        my $params = [{-i => "$tn_otu_table_file",
+                       -o => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type",
+                       -m => $matrix_type}];
+        
+        # qiime spews when you give it a tree for some methods 
+        if(!($matrix_type =~ /euclid/))
+        {
+            push @{$params}, {-t => "$phylogeny_proc_dir/$nn_tree_file"};
+        }
+        
+        checkAndRunCommand("beta_diversity.py", $params, DIE_ON_FAILURE);
     
-    # Compute principal coordinates
-    check_and_run_command("principal_coordinates.py", {-i => "$global_TB_results_dir/beta_diversity/$tn_prefix/$matrix_type/$beta_file",
-                                                       -o => "$global_TB_results_dir/beta_diversity/$tn_prefix/$matrix_type/$pcoa_file"}, DIE_ON_FAILURE);
+        
+        my $beta_file = $matrix_type."_".$tn_prefix."_otu_table.txt";
+        my $upgma_file = $matrix_type."_".$tn_prefix."_otu_table_upgma.tre";
+        my $pcoa_file = $matrix_type."_".$tn_prefix."_pcoa.txt";
+    
+        # Perform UPGMA clustering on rarefied distance matrices 
+        checkAndRunCommand("upgma_cluster.py", [{-i => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type/$beta_file",
+                                                    -o => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type/$upgma_file"}], DIE_ON_FAILURE);    
+        
+        # Compute principal coordinates
+        checkAndRunCommand("principal_coordinates.py", [{-i => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type/$beta_file",
+                                                            -o => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type/$pcoa_file"}], DIE_ON_FAILURE);
+    }
 }
 
 # shuffle the results around
@@ -352,95 +399,121 @@ if($global_norm_style eq "SEQ")
 
     # once we've found our guy, lets make an otu table with assigned taxonomies   
     print "Picking OTUs for SEQ normalised data set...\n";
-    check_and_run_command("pick_otus.py", {-i => "$global_SB_processing_dir/$sn_fasta_file",
-                                           -s => $global_similarity_setting,
-                                           -o => "$global_SB_processing_dir/uclust_picked_otus"}, DIE_ON_FAILURE);
+    checkAndRunCommand("pick_otus.py", [{-i => "$global_SB_processing_dir/$sn_fasta_file",
+                                         -s => $global_similarity_setting,
+                                         -o => "$global_SB_processing_dir/uclust_picked_otus"}], DIE_ON_FAILURE);
 
     print "Gettting a representitive set...\n";
-    check_and_run_command("pick_rep_set.py", {-i => "$global_SB_processing_dir/uclust_picked_otus/$sn_otus_file",
-                                              -f => "$global_SB_processing_dir/$sn_fasta_file"}, DIE_ON_FAILURE);
+    checkAndRunCommand("pick_rep_set.py", [{-i => "$global_SB_processing_dir/uclust_picked_otus/$sn_otus_file",
+                                            -f => "$global_SB_processing_dir/$sn_fasta_file"}], DIE_ON_FAILURE);
 
     # if we are doing OTU_AVERAGE (or if we've ben asked to) then we need to assign taxonomy here
     print "Assigning taxonomy for SEQ normalised data set...\n";
     my $sn_rep_set_fasta = "$global_SB_processing_dir/".$sn_fasta_file."_rep_set.fasta";
-    check_and_run_command("assign_taxonomy.py", {-i => $sn_rep_set_fasta,
-                                                 -t => $TAX_tax_file,
-                                                 -b => $TAX_blast_file,
-                                                 -m => "blast",
-                                                 -e => $global_e_value,
-                                                 -o => $global_SB_processing_dir}, DIE_ON_FAILURE);
-    
-    print "Treeing SEQ normalised data set...\n";
-    check_and_run_command("align_seqs.py", {-i => $sn_rep_set_fasta,
-                                            -t => $imputed_file,
-                                            -p => 0.6,
-                                            -o => "$global_SB_processing_dir/pynast_aligned"}, DIE_ON_FAILURE);
-    
-    my $sn_rep_set_aligned = "$global_SB_processing_dir/pynast_aligned/".$sn_fasta_file."_rep_set_aligned.fasta";
-    check_and_run_command("filter_alignment.py", {-i => $sn_rep_set_aligned,
-                                                  -o => $global_SB_processing_dir}, DIE_ON_FAILURE);
-    
-    my $sn_rep_set_aligned_filtered = "$global_SB_processing_dir/".$sn_fasta_file."_rep_set_aligned_pfiltered.fasta";
-    check_and_run_command("make_phylogeny.py", {-i => $sn_rep_set_aligned_filtered,
-                                                -r => "midpoint"}, DIE_ON_FAILURE);
-    
-    my $sn_rep_set_aligned_filtered_tree = "$global_SB_processing_dir/".$sn_fasta_file."_rep_set_aligned_pfiltered.tre";
-    move( $sn_rep_set_aligned_filtered_tree, $sn_tree_file);
+    checkAndRunCommand("assign_taxonomy.py", [{-i => $sn_rep_set_fasta,
+                                               -t => $TAX_tax_file,
+                                               -b => $TAX_blast_file,
+                                               -m => "blast",
+                                               -e => $global_e_value,
+                                               -o => $global_SB_processing_dir}], DIE_ON_FAILURE);
 
     print "Making SEQ SEQ normalised otu table...\n";
     my $sn_rep_set_tax_assign = "$global_SB_processing_dir/".$sn_fasta_file."_rep_set_tax_assignments.txt";
-    check_and_run_command("make_otu_table.py", {-i => "$global_SB_processing_dir/uclust_picked_otus/$sn_otus_file",
-                                                -t => $sn_rep_set_tax_assign,
-                                                -o => $sn_otu_table_file}, DIE_ON_FAILURE);
+    checkAndRunCommand("make_otu_table.py", [{-i => "$global_SB_processing_dir/uclust_picked_otus/$sn_otus_file",
+                                              -t => $sn_rep_set_tax_assign,
+                                              -o => $sn_otu_table_file}], DIE_ON_FAILURE);
     
-    check_and_run_command("reformat_otu_table.py",  {-i => $sn_otu_table_file,
-                                                     -t => $sn_rep_set_tax_assign,
-                                                     -o => "$sn_otu_table_file.expanded"}, IGNORE_FAILURE);
-
-    print "Alpha and beta diversity for SEQ normalised otu table...\n";
-    # beta
-    my @beta_methods = ('weighted_unifrac','unweighted_unifrac','euclidean','hellinger','binary_euclidean','chord');
-    foreach my $matrix_type (@beta_methods)
-    {
-        my $params = {-i => $sn_otu_table_file,
-                      -o => "$global_SB_results_dir/beta_diversity/$matrix_type",
-                      -m => $matrix_type};
-    
-        # qiime spews when you give it a tree for some methods 
-        if(!($matrix_type =~ /euclid/))
-        {
-            $params->{"-t"} = $sn_tree_file;
-        }
-        
-        check_and_run_command("beta_diversity.py", $params, DIE_ON_FAILURE);
-        
-        my $beta_file = $matrix_type."_".$sn_prefix."_otu_table.txt";
-        my $upgma_file = $matrix_type."_".$sn_prefix."_otu_table_upgma.tre";
-        my $pcoa_file = $matrix_type."_".$sn_prefix."_pcoa.txt";
-        
-        # Perform UPGMA clustering on rarefied distance matrices 
-        check_and_run_command("upgma_cluster.py", {-i => "$global_SB_results_dir/beta_diversity/$matrix_type/$beta_file",
-                                                   -o => "$global_SB_results_dir/beta_diversity/$matrix_type/$upgma_file"}, DIE_ON_FAILURE);
-
-        # Compute principal coordinates
-        check_and_run_command("principal_coordinates.py", {-i => "$global_SB_results_dir/beta_diversity/$matrix_type/$beta_file",
-                                                           -o => "$global_SB_results_dir/beta_diversity/$matrix_type/$pcoa_file"}, DIE_ON_FAILURE);
-    }
-
-    check_and_run_command("alpha_diversity.py", {-i => $sn_otu_table_file,
-                                                 -t => $sn_tree_file,
-                                                 -o => "$global_SB_results_dir/alpha_diversity.txt",
-                                                 -m => join(",", qw(chao1
-                                                                    chao1_confidence
-                                                                    PD_whole_tree
-                                                                    observed_species
-                                                                    simpson
-                                                                    shannon
-                                                                    fisher_alpha))}, DIE_ON_FAILURE);
+    checkAndRunCommand("reformat_otu_table.py",  [{-i => $sn_otu_table_file,
+                                                   -t => $sn_rep_set_tax_assign,
+                                                   -o => "$sn_otu_table_file.expanded"}], IGNORE_FAILURE);
 
     print "Summarizing by taxa.....\n";
-    check_and_run_command("summarize_taxa.py", {-i => $sn_otu_table_file,
-                                                -o => "$global_SB_results_dir/breakdown_by_taxonomy/"}, DIE_ON_FAILURE);
+    checkAndRunCommand("summarize_taxa.py", [{-i => $sn_otu_table_file,
+                                              -o => "$global_SB_results_dir/breakdown_by_taxonomy/"}], DIE_ON_FAILURE);
+    
+    mkdir ("$global_SB_processing_dir/blast_substituted_phylogeny/") or die "Unable to make blast_substituted_phylogeny directory.";
+
+    checkAndRunCommand("generate_fasta_from_taxonomy.py",[{-t => $sn_rep_set_tax_assign,
+                                                           -r => $sn_rep_set_fasta,
+                                                           -b => $TAX_aligned_blast_file,
+                                                           -o => "$global_SB_processing_dir/blast_substituted_phylogeny/$sn_fasta_file"."_rep_set_aligned_pfiltered.fasta"}], DIE_ON_FAILURE);
+    
+    print "Treeing SEQ normalised data set...\n";
+    checkAndRunCommand("align_seqs.py", [{-i => $sn_rep_set_fasta,
+                                          -t => $imputed_file,
+                                          -p => 0.6,
+                                          -o => "$global_SB_processing_dir/de_novo_phylogeny/pynast_aligned"}], DIE_ON_FAILURE);
+    
+    my $sn_rep_set_aligned = "$global_SB_processing_dir/de_novo_phylogeny/pynast_aligned/".$sn_fasta_file."_rep_set_aligned.fasta";
+    &checkFileExists($sn_rep_set_aligned);
+    checkAndRunCommand("filter_alignment.py", [{-i => $sn_rep_set_aligned,
+                                                -o => "$global_SB_processing_dir/de_novo_phylogeny/"}], DIE_ON_FAILURE);
+    
+    # From here on in, processing will occur twice, once for the de-novo alignment
+    # and another for the blast substituted phylogeny
+    #
+    my @phylogeny_dirs = ("de_novo_phylogeny", "blast_substituted_phylogeny");
+    
+    foreach my $phylogeny_dir (@phylogeny_dirs) {  
+    
+        # Define processing and results directories
+        my $phylogeny_proc_dir = "$global_SB_processing_dir/$phylogeny_dir";
+        my $phylogeny_results_dir = "$global_SB_results_dir/$phylogeny_dir";
+        if (! -e $phylogeny_results_dir) {
+             mkdir ($phylogeny_results_dir)
+        }
+    
+        my $sn_rep_set_aligned_filtered = "$phylogeny_proc_dir/".$sn_fasta_file."_rep_set_aligned_pfiltered.fasta";
+        &checkFileExists($sn_rep_set_aligned_filtered);
+        checkAndRunCommand("make_phylogeny.py", [{-i => $sn_rep_set_aligned_filtered,
+                                                  -r => "midpoint"}], DIE_ON_FAILURE);
+        
+        my $sn_rep_set_aligned_filtered_tree = "$phylogeny_proc_dir/".$sn_fasta_file."_rep_set_aligned_pfiltered.tre";
+        move( $sn_rep_set_aligned_filtered_tree, "$phylogeny_proc_dir/$sn_tree_file");
+    
+        print "Alpha and beta diversity for SEQ normalised otu table...\n";
+        # alpha
+        
+        checkAndRunCommand("alpha_diversity.py", [{-i => $sn_otu_table_file,
+                                           -t => "$phylogeny_proc_dir/$sn_tree_file",
+                                           -o => "$phylogeny_results_dir/alpha_diversity.txt",
+                                           -m => join(",", qw(chao1
+                                                              chao1_confidence
+                                                              PD_whole_tree
+                                                              observed_species
+                                                              simpson
+                                                              shannon
+                                                              fisher_alpha))}], DIE_ON_FAILURE);
+        #beta
+        my @beta_methods = ('weighted_unifrac','unweighted_unifrac','euclidean','hellinger','binary_euclidean','chord');
+        foreach my $matrix_type (@beta_methods)
+        {
+            my $params = {-i => $sn_otu_table_file,
+                          -o => "$phylogeny_results_dir/beta_diversity/$matrix_type",
+                          -m => $matrix_type};
+        
+            # qiime spews when you give it a tree for some methods 
+            if(!($matrix_type =~ /euclid/))
+            {
+                $params->{"-t"} = "$phylogeny_proc_dir/$sn_tree_file";
+            }
+            
+            checkAndRunCommand("beta_diversity.py", [$params], DIE_ON_FAILURE);
+            
+            my $beta_file = $matrix_type."_".$sn_prefix."_otu_table.txt";
+            my $upgma_file = $matrix_type."_".$sn_prefix."_otu_table_upgma.tre";
+            my $pcoa_file = $matrix_type."_".$sn_prefix."_pcoa.txt";
+            
+            # Perform UPGMA clustering on rarefied distance matrices 
+            checkAndRunCommand("upgma_cluster.py", [{-i => "$phylogeny_results_dir/beta_diversity/$matrix_type/$beta_file",
+                                                     -o => "$phylogeny_results_dir/beta_diversity/$matrix_type/$upgma_file"}], DIE_ON_FAILURE);
+    
+            # Compute principal coordinates
+            checkAndRunCommand("principal_coordinates.py", [{-i => "$phylogeny_results_dir/beta_diversity/$matrix_type/$beta_file",
+                                                             -o => "$phylogeny_results_dir/beta_diversity/$matrix_type/$pcoa_file"}], DIE_ON_FAILURE);
+        }
+
+    }
 }
     
 print "Results are located in: $output_dir/results/\n";
@@ -460,45 +533,45 @@ sub jack_knifing
     #-----
     # Do jackknifing for a specific type of matrix
     #
-    my ($matrix_type, $raw_otu_table, $raw_tree, $jack_knife_folder ) = @_;
+    my ($matrix_type, $raw_otu_table, $raw_tree, $jack_knife_folder, $phylogeny_folder) = @_;
 
     # Produce distance matrix reflecting beta diversity in non-normalised OTU table
-    check_and_run_command("beta_diversity.py", {-i => $raw_otu_table,
-                                                -o => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type",
-                                                -m => $matrix_type,
-                                                -t => $raw_tree}, DIE_ON_FAILURE);
+    checkAndRunCommand("beta_diversity.py", [{-i => $raw_otu_table,
+                                              -o => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type",
+                                              -m => $matrix_type,
+                                              -t => $raw_tree}], DIE_ON_FAILURE);
 
     # Perform UPGMA clustering on non-normalised distance matrix
     my $beta_otu_table = $matrix_type."_".$nn_prefix."_otu_table.txt";
     my $upgma_cluster_tree = $matrix_type."_".$nn_prefix."_otu_table_upgma.tre";
 
-    check_and_run_command("upgma_cluster.py", {-i => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type/$beta_otu_table",
-                                               -o => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type/$upgma_cluster_tree"}, DIE_ON_FAILURE);
+    checkAndRunCommand("upgma_cluster.py", [{-i => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type/$beta_otu_table",
+                                             -o => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type/$upgma_cluster_tree"}], DIE_ON_FAILURE);
 
     # Produce distance matrices reflecting beta diversity in the rarefied OTU tables
-    check_and_run_command("beta_diversity.py", {-i => $jack_knife_folder,
-                                                -o => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type/rare_dm/",
-                                                -m => $matrix_type,
-                                                -t => $raw_tree}, DIE_ON_FAILURE);
+    checkAndRunCommand("beta_diversity.py", [{-i => $jack_knife_folder,
+                                              -o => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type/rare_dm/",
+                                              -m => $matrix_type,
+                                              -t => $raw_tree}], DIE_ON_FAILURE);
 
     # Perform UPGMA clustering on rarefied distance matrices 
-    check_and_run_command("upgma_cluster.py", {-i => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type/rare_dm/",
-                                               -o => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type/rare_upgma/"}, DIE_ON_FAILURE);
+    checkAndRunCommand("upgma_cluster.py", [{-i => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type/rare_dm/",
+                                             -o => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type/rare_upgma/"}], DIE_ON_FAILURE);
 
     # Compare the consensus tree to the beta-derived trees
-    check_and_run_command("tree_compare.py", {-s => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type/rare_upgma/",
-                                              -m => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type/$upgma_cluster_tree",
-                                              -o => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type/upgma_cmp/"}, DIE_ON_FAILURE);
+    checkAndRunCommand("tree_compare.py", [{-s => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type/rare_upgma/",
+                                            -m => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type/$upgma_cluster_tree",
+                                            -o => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type/upgma_cmp/"}], DIE_ON_FAILURE);
 
     # Compute principal coordinates
-    check_and_run_command("principal_coordinates.py", {-i => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type/rare_dm/",
-                                                       -o => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type/pcoa/"}, DIE_ON_FAILURE);
+    checkAndRunCommand("principal_coordinates.py", [{-i => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type/rare_dm/",
+                                                     -o => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type/pcoa/"}], DIE_ON_FAILURE);
 
     # Make PDF of Jackknife tree with labeled support: weighted unifrac command
-    my $output_pdf = "$global_TB_results_dir/$matrix_type"."_betadiv_jackknife_tree.pdf";
-    check_and_run_command("make_bootstrapped_tree.py", {-m => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type/upgma_cmp/master_tree.tre",
-                                                        -s => "$global_TB_results_dir/beta_diversity/$nn_prefix/$matrix_type/upgma_cmp/jackknife_support.txt",
-                                                        -o => $output_pdf}, DIE_ON_FAILURE);
+    my $output_pdf = "$phylogeny_folder/$matrix_type"."_betadiv_jackknife_tree.pdf";
+    checkAndRunCommand("make_bootstrapped_tree.py", [{-m => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type/upgma_cmp/master_tree.tre",
+                                                      -s => "$phylogeny_folder/beta_diversity/$nn_prefix/$matrix_type/upgma_cmp/jackknife_support.txt",
+                                                      -o => $output_pdf}], DIE_ON_FAILURE);
 
 }
 
@@ -551,7 +624,7 @@ sub find_centroid_table
     run_R_cmd(qq`for (i in c(2:len_a)) { ave <- ave + big_frame[,,i]; }`, $R_cmd_log_fh);
     run_R_cmd(qq`ave <- ave/len_a;`, $R_cmd_log_fh);
 
-    print "  --calculating didtances of tables to centroid...\n";
+    print "  --calculating distances of tables to centroid...\n";
 
     # find the euclidean distance of each matrix from the average
     run_R_cmd(qq`dist<-array(0,dim=c(len_a));`, $R_cmd_log_fh);
@@ -633,17 +706,17 @@ sub find_centroid_sequences
         my $norm_seq_file = $norm_seq_file_root.".fa";
         my $norm_otus_file = $norm_seq_file_root."_otus.txt";
         my $norm_otu_table_file = $norm_seq_file_root."_otu_table.txt";
-        check_and_run_command("app_normalise_reads.pl", {-in => $seqs,
-                                                         -n => $global_norm_sample_size,
-                                                         -o => $norm_seq_file}, DIE_ON_FAILURE); 
+        checkAndRunCommand("app_normalise_reads.pl", [{-in => $seqs,
+                                                       -n => $global_norm_sample_size,
+                                                       -o => $norm_seq_file}], DIE_ON_FAILURE); 
     
         # make an otu table for each guy
-        check_and_run_command("pick_otus.py", {-i => $norm_seq_file,
-                                               -s => $global_similarity_setting,
-                                               -o => $path}, DIE_ON_FAILURE);
+        checkAndRunCommand("pick_otus.py", [{-i => $norm_seq_file,
+                                             -s => $global_similarity_setting,
+                                             -o => $path}], DIE_ON_FAILURE);
         
-        check_and_run_command("make_otu_table.py", {-i => $norm_otus_file,
-                                                    -o => $norm_otu_table_file}, DIE_ON_FAILURE);    
+        checkAndRunCommand("make_otu_table.py", [{-i => $norm_otus_file,
+                                                  -o => $norm_otu_table_file}], DIE_ON_FAILURE);    
     }
 
     print "\n";
@@ -927,7 +1000,8 @@ sub parse_config_results
 # TEMPLATE SUBS
 ######################################################################
 sub checkParams {
-    my @standard_options = ( "help|h+", "config|c:s", "identity|i:i", "e:i");
+    my @standard_options = ( "help|h+", "config|c:s", "identity|i:i", "e:i",
+                             "b|blast:s", "t|taxonomy:s", "i|imputed:s");
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -944,6 +1018,10 @@ sub checkParams {
 
     # Compulsosy items
     if(!exists $options{'config'} ) { print "**ERROR: you MUST give a config file\n"; exec("pod2usage $0"); }
+    if(! -e $options{'config'} ) {
+        print "**ERROR: " . $options{'config'} ." does not exist\n";
+        exec("pod2usage $0");
+    }
     if(exists $options{'identity'})
     {
         if(($options{'identity'} <= 0) || ($options{'identity'} > 1))
@@ -951,6 +1029,8 @@ sub checkParams {
             die "Identity must be an integer greater than 0 and no greater than 1\n";
         }
     }
+    
+    
     #if(!exists $options{''} ) { print "**ERROR: \n"; exec("pod2usage $0"); }
 
     return \%options;
@@ -969,6 +1049,19 @@ print<<"EOF";
 EOF
 }
 
+sub overrideDefault {
+    #-----
+    # Set and override default values for parameters
+    #
+    my ($default_value, $option_name) = @_;
+    if(exists $options->{$option_name}) 
+    {
+        return $options->{$option_name};
+    }
+    return $default_value;
+}
+
+
 __DATA__
 
 =head1 NAME
@@ -977,7 +1070,8 @@ __DATA__
 
 =head1 COPYRIGHT
 
-   copyright (C) 2011 Michael Imelfort and Paul Dennis
+   copyright (C) 2011 Michael Imelfort and Paul Dennis, 2012 Connor Skennerton
+        and Adam Skarshewski.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -1002,7 +1096,10 @@ __DATA__
 
       -c CONFIG_FILE               App config file to be processed
       [-i identity VALUE]          Set blast identity [default: 97%]
-      [-e EVALUE]                  Set e-value for blast (assign taxonomy) [default 0.001]
+      [-e EVALUE]                  Set e-value for blast (assign taxonomy) [default 0.001]      
+      [-b FILE]                    Path to a custom blast database
+      [-t FILE]                    Path to a custom taxonomy for otus
+      [-i FILE]                    Path to a custom imputed file
       [-help -h]                   Displays basic usage information
          
 =cut

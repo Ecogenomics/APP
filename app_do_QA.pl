@@ -28,6 +28,7 @@ use warnings;
 
 #core Perl modules
 use Getopt::Long;
+use Carp;
 
 #CPAN modules
 use File::Basename;
@@ -52,20 +53,18 @@ my $options = checkParams();
 # CODE HERE
 ######################################################################
 
-print "Checking if all the config checks out...\t\t";
-# acacia config file
-if(exists $options->{'acacia_conf'})
-{
-    # user supplied config file
-    $global_acacia_config = $options->{'acacia_conf'};
+if (defined($options->{'acacia_conf'})) {
+    updateAcaciaConfigHash($options->{'acacia_conf'})
 }
-if (!(-e $global_acacia_config)) { die "Acacia config file: $global_acacia_config does not exist!\n"; }
 
 # get the Job_ID we're working on
 my $job_ID = basename($options->{'config'});
-my @cb_1 = split /_/, $job_ID;
-my @cb_2 = split /\./, $cb_1[1];
-$job_ID = $cb_2[0];
+if ($job_ID =~ /app_(.*).config$/) {
+    $job_ID = $1;
+} else {
+    croak "The app config file needs to be of the form app_<prefix>.config, ".
+        "where <prefix> can be chosen by the user.\n" ;
+}
 
 # get the working directories
 getWorkingDirs($options->{'config'});
@@ -142,7 +141,7 @@ __DATA__
 
 =head1 COPYRIGHT
 
-   copyright (C) 2011 Michael Imelfort and Paul Dennis
+   copyright (C) 2011 Michael Imelfort and Paul Dennis, 2012 Adam Skarshewski
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by

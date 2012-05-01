@@ -62,7 +62,7 @@ my $options = checkParams();
 my $global_R_instance = Statistics::R->new();
 $global_R_instance->start();
 
-getWorkingDirs($options->{'config'});
+getWorkingDirs(dirname($options->{'config'}), $options->{'dir'});
 
 # make a directory for the R log to be placed
 makeImageDirs();
@@ -80,8 +80,8 @@ my %global_heat_map_list = ();
 my %global_otu_nice_names_list = ();
 
 # we need to modify some of the main otu tables
-my $global_tn_modified;
-my $global_sn_modified;
+my $global_tn_condensed;
+my $global_sn_condensed;
 
 my %allowable_trans_types = ('weighted_unifrac' => 1,
                              'unweighted_unifrac' => 1,
@@ -103,26 +103,39 @@ print "All good!\n";
 # make lists of all the analyses we'll need to do
 
 # always do these guys
-my @otu_search_dirs = ("$global_TB_results_dir/beta_diversity/$nn_prefix/", "$global_TB_results_dir/beta_diversity/$tn_prefix/");
 my @hm_search_dirs = ("$global_TB_results_dir/breakdown_by_taxonomy");
+my @otu_search_dirs;
+
+
+my @phylogeny_dirs = ("de_novo_phylogeny", "blast_substituted_phylogeny");
+foreach my $phylogeny_dir (@phylogeny_dirs) {  
+    @otu_search_dirs = ("$global_TB_results_dir/$phylogeny_dir/beta_diversity/$nn_prefix/",
+                        "$global_TB_results_dir/$phylogeny_dir/beta_diversity/$tn_prefix/");
+}
+
 
 #### TABLE NORM IMAGES
-$global_tn_modified = modify_otu($tn_otu_table_file, $global_TB_results_dir);
 
-$global_otu_nice_names_list{ $global_tn_modified } = "$global_TB_results_dir/$tn_prefix"."_otu_table";
-$global_otu_table_list{ $global_tn_modified } = $global_TB_results_dir;
+$global_tn_condensed = modify_otu($tn_otu_table_file, $global_TB_results_dir);
+
+$global_otu_nice_names_list{ $global_tn_condensed } = "$global_TB_results_dir/$tn_prefix"."_otu_table";
+$global_otu_table_list{ $global_tn_condensed } = $global_TB_results_dir;
+
+print $tn_otu_table_file, $sn_otu_table_file, "\n";
 
 #### SEQ NORM IMAGES IF NEEDED
 if($global_norm_style eq "SEQ")
 {
     # add OTU table files
-    $global_sn_modified = modify_otu($sn_otu_table_file, $global_SB_results_dir);
+    $global_sn_condensed = modify_otu($sn_otu_table_file, $global_SB_results_dir);
 
-    $global_otu_nice_names_list{ $global_sn_modified } = "$global_SB_results_dir/$sn_prefix"."_otu_table";
-    $global_otu_table_list{ $global_sn_modified } = $global_SB_results_dir;
+    $global_otu_nice_names_list{ $global_sn_condensed } = "$global_SB_results_dir/$sn_prefix"."_otu_table";
+    $global_otu_table_list{ $global_sn_condensed } = $global_SB_results_dir;
 
-    push @otu_search_dirs, "$global_SB_results_dir/beta_diversity/";
-    
+    foreach my $phylogeny_dir (@phylogeny_dirs) {
+         push @otu_search_dirs, "$global_SB_results_dir/$phylogeny_dir/beta_diversity/";
+    }
+   
     # now do heatmaps
     push @hm_search_dirs, "$global_SB_results_dir/breakdown_by_taxonomy";
 }
@@ -154,18 +167,18 @@ foreach my $this_otu (keys %global_otu_table_list)
     print "$this_otu, $global_otu_table_list{$this_otu}, 0\n";
     make_otu_images($this_otu, $global_otu_table_list{$this_otu}, 0);
 }
-
+q@
 # now do the two hellinger types on the normalised otu tables
-$global_otu_nice_names_list{$global_tn_modified} = "$global_TB_results_dir/$tn_prefix"."_hellinger_otu_table";
-make_otu_images($global_tn_modified, $global_TB_results_dir, 1);
+$global_otu_nice_names_list{$global_tn_condensed} = "$global_TB_results_dir/$tn_prefix"."_hellinger_otu_table";
+make_otu_images($global_tn_condensed, $global_TB_results_dir, 1);
 
 if($global_norm_style eq "SEQ")
 {
-    $global_otu_nice_names_list{ $global_sn_modified } = "$global_SB_results_dir/$sn_prefix"."_hellinger_otu_table";
-    make_otu_images($global_sn_modified, $global_SB_results_dir, 1);
+    $global_otu_nice_names_list{ $global_sn_condensed } = "$global_SB_results_dir/$sn_prefix"."_hellinger_otu_table";
+    make_otu_images($global_sn_condensed, $global_SB_results_dir, 1);
 }
 print "\n";
-
+@;
 # process heatmap data
 print "Making taxa heatmaps\n";
 foreach my $base_dir (@hm_search_dirs)
@@ -195,7 +208,7 @@ sub modify_otu
     # used when making pca plots
     #
     my ($otu_table, $working_dir) = @_;
-    my $ret_table = $otu_table.".modified";
+    my $ret_table = $otu_table.".condensed";
     `sed -e "s/#rar.*//" -e "s/#OTU ID//" -e "/^\$/d" -e "s/\\t[^\\t]*\$//" $otu_table > $ret_table`;
     return $ret_table; 
 }
@@ -207,7 +220,7 @@ sub modify_otu_hm
     # used whe making tax heatmaps
     #
     my ($otu_table) = @_;
-    my $ret_table = $otu_table.".modified";
+    my $ret_table = $otu_table.".condensed";
     if(1)#! -e  $ret_table)
     {
         # create the file
@@ -398,7 +411,7 @@ sub make_otu_images
     $R_cmd = "svg(filename='$nmds_svg', height=6, width=6)";    print $r_log_fh "$R_cmd\n";    $global_R_instance->run($R_cmd);
     $R_cmd = "plot(tb.nmds,type='t',main='$nmds_title')";    print $r_log_fh "$R_cmd\n";    $global_R_instance->run($R_cmd);
     $R_cmd = "dev.off()";    print $r_log_fh "$R_cmd\n";    $global_R_instance->run($R_cmd);
-        
+     
     # Hierarchical clustering
     
     my $clust_pdf = $nice_name.".clust.pdf";
@@ -482,7 +495,7 @@ sub parse_config_images
 # TEMPLATE SUBS
 ######################################################################
 sub checkParams {
-    my @standard_options = ( "help|h+", "config|c:s");
+    my @standard_options = ( "help|h+", "config|c:s", "dir|d:s");
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -499,6 +512,7 @@ sub checkParams {
 
     # Compulsosy items
     if(!exists $options{'config'} ) { print "**ERROR: you MUST give a config file\n"; exec("pod2usage $0"); }
+    if(!exists $options{'dir'} ) { print "**ERROR: you MUST give an analysis directory\n"; exec("pod2usage $0"); }
     #if(!exists $options{''} ) { print "**ERROR: \n"; exec("pod2usage $0"); }
 
     return \%options;
@@ -548,11 +562,13 @@ __DATA__
 
 =head1 SYNOPSIS
 
-    app_make_images.pl -c|config CONFIG_FILE [-help|h]
+    app_make_images.pl -c|config CONFIG_FILE -d ANALYSIS_DIRECTORY [-help|h]
     
     Make purdy looking images using results from APP
 
       -c CONFIG_FILE               app config file to be processed
+      -d ANALYSIS_DIRECTORY        analysis directory created by
+                                   app_make_results.pl
       [-help -h]                   Displays basic usage information
 
 =cut
