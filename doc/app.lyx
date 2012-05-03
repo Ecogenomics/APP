@@ -15,6 +15,10 @@
 \sloppy
 
 \newenvironment{command}{\everypar{\hangindent=4em\hangafter=2}}
+
+% Variables used within the document
+\newcommand{\currentVersion}{2.0.0}
+\newcommand{\frankenQIIMEVersion}{1.1.0}
 \end_preamble
 \options intoc,bibliography=totoc,index=totoc,BCOR7.5mm,captions=tableheading
 \use_default_options true
@@ -79,7 +83,20 @@ The ACE Pyrotag Pipeline (APP) Documentation
 \end_layout
 
 \begin_layout Date
-Version 1.1.0
+Version 
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+currentVersion
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Standard
@@ -279,33 +296,27 @@ Regardless of which part APP will be used, environmental variables required
 \begin_layout Quote
 
 \family typewriter
-$ module load app
-\end_layout
+$ module load app/
+\begin_inset ERT
+status open
 
-\begin_layout Standard
-Depending on which part of APP is going to be used, QIIME may need to be
- loaded.
- The script reference (chapter 
-\begin_inset CommandInset ref
-LatexCommand ref
-reference "sec:Script-Reference"
+\begin_layout Plain Layout
+
+
+\backslash
+currentVersion
+\end_layout
 
 \end_inset
 
-) describes which particular scripts require QIIME.
- If in doubt, load QIIME.
- The (strongly) recommended flavour of QIIME for use with APP is FrankenQIIME.
- It can be loaded using the following command: 
-\end_layout
 
-\begin_layout Quote
-
-\family typewriter
-$ module load frakenqiime
 \end_layout
 
 \begin_layout Standard
-You can alternatively choose to load 
+Older versions of APP required QIIME to be loaded separately, however with
+ the newer versions of APP, QIIME (specifically FrankenQIIME) is loaded
+ automatically to ensure correct versioning.
+ If the APP Version 1 is to be loaded, 
 \begin_inset Quotes eld
 \end_inset
 
@@ -313,10 +324,24 @@ vanilla
 \begin_inset Quotes erd
 \end_inset
 
- QIIME, but certain features will not be implemented and is mostly included
- for backward compatibility.
- In either case, loading both APP and QIIME will also load all dependencies
- such as R, uclust and ACACIA.
+ QIIME will need to be loaded independently.
+ It can be loaded using the following command: 
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+$ module load qiime 
+\shape italic
+# Only do this for app versions 1.x.x
+\end_layout
+
+\begin_layout Standard
+You can alternatively choose to load FrankenQIIME to gain access to added
+ functionality, but backwards compatibility is not guaranteed and APP may
+ fail as a result.
+ In either case, loading APP (and possibly QIIME depending on the version
+ of APP) will also load all dependencies such as R, uclust and ACACIA.
  
 \end_layout
 
@@ -331,7 +356,7 @@ APP provides several Perl scripts which allow the conversion of PCR product
  This is a two step process.
  Firstly, the Caliper generated csv file and a PyroDB EPI conversion file
  (sourced from the particular gasket page of PyroDB) is converted to a intermedi
-ate csv using the following command.
+ate csv using the following command:
 \end_layout
 
 \begin_layout Quote
@@ -347,9 +372,27 @@ pyrodb_epi_file
 \shape default
  [-o 
 \shape italic
-output_file
+csv_result_file
 \shape default
 ]
+\end_layout
+
+\begin_layout Standard
+Secondly, the csv file created by app_convert.pl needs to be converted into
+ a file that can be used on the Eppendorf robot, and this is achieved by
+ using the following command:
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+$ app_csv2epi.pl -i 
+\shape italic
+csv_result_file
+\shape default
+ -p 
+\shape italic
+output_prefix
 \end_layout
 
 \begin_layout Section
@@ -473,7 +516,7 @@ $ app_do_QA.pl -c app_100.config
 \begin_layout Standard
 This will produce a QA folder in the working directory.
  Descriptions of the tasks performed by app_do_QA.pl and the resulting files
- are described in the app_do_QA.pl subsection of section 
+ are described in the app_do_QA.pl subsection of chapter 
 \begin_inset CommandInset ref
 LatexCommand ref
 reference "sec:Script-Reference"
@@ -1008,7 +1051,7 @@ n
 \shape default
  is an folder counter starting from 1.
  A description of the output files from app_make_results.pl is available
- in section
+ in chapter 
 \begin_inset CommandInset ref
 LatexCommand ref
 reference "sec:Script-Reference"
@@ -1046,7 +1089,7 @@ app_analysis_directory
 \shape default
  refers to the directory created by app_make_results.pl.
  A description of the output files from app_make_images.pl is available in
- section
+ chapter 
 \begin_inset CommandInset ref
 LatexCommand ref
 reference "sec:Script-Reference"
