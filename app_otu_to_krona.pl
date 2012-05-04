@@ -52,37 +52,82 @@ if (defined $global_options->{'input'}) {
     $in = \*STDIN;
 }
 
-<$in>;
-my @names;
-my @out_fh;
+my $number_of_samples = 0;
+# the number of columns that is defined by pyrotagger
+my $base_columns = 14;
+
+# array to sample names
+my @sample_names;
+# an array of corresponding tmp files
+my @tmp_files;
+# with the qiime output this line is waste
+# pyrotagger uses it as the header
+my $first_line = <$in>;
+if($global_options->{"pyrotagger"}) {
+    $first_line =~ s/\s+$//;
+    
+    # figure out how many samples there are
+    my @n = split(/\t/, $first_line);
+    my $number_of_columns = scalar @n;
+    $number_of_samples = $number_of_columns - $base_columns;
+    @sample_names = splice(@n, 1, $number_of_samples);
+} else {
+    # the second line in qiime is the header
+    my $second_line = <$in>;
+    chomp $second_line;
+    $second_line =~ s/\s+$//;
+    @sample_names = split(/\t/, $second_line);
+    # remove first and last columns
+    shift @sample_names; pop @sample_names;
+    # @names = map {$_.".krona.tmp.otus"} @z;
+}
+
+
+my @file_names = map{$_.".krona.tmp.otus"} @sample_names;
+@tmp_files = map {IO::File->new($_, 'w')} @file_names;
 while(<$in>) {
     chomp;
-    if(/^#/) {
-        my @z = split(/\t/);
-        # remove first and last columns
-        shift @z; pop @z;
-        @names = map {$_.".krona.tmp.otus"} @z;
-        @out_fh = map {IO::File->new($_, 'a')} @names;
-        next;
+    my @otus;
+    if($global_options->{"pyrotagger"}) {
+        s/\s+$//;
     }
-    my @c = split(/\t/);
-    my @l = split(/;\w_{1,2}|;/,$c[-1]);
-    for (my $i = 1; $i < (scalar @c) - 1; $i++) {
-        $out_fh[$i- 1]->print( "$c[$i]\t", join("\t",@l), "\n");
+    my @c = split(/\t/, $_);
+    if($global_options->{"pyrotagger"}) {
+        
+        # if pyrotagger doesn't find a hit it outputs nothing
+        # therefore the elements of the array 
+        next if($#c <( $number_of_samples + $base_columns));
+
+        @otus = @c[1, $number_of_samples];
+        my $tax_string = join("\t", splice(@c, $number_of_samples + $base_columns));
+        my @full_name = splice(@c,-3,1);
+        $tax_string .= "\t".$full_name[0];
+
+        # pyrotagger outputs a blank rather than 0, need to fix that
+        $_ ||= '0' for @otus;
+        foreach my $i (0 .. $#otus) {
+            $tmp_files[$i]->print($otus[$i],"\t", $tax_string, "\n");
+        }
+    } else {
+        # deal with the greengenes or silva formatted tax string at the end of a line
+        my @l = split(/;?\w_{1,2}|;/,$c[-1]);
+        foreach my $i (1 .. $#c - 1) {
+            $tmp_files[$i-1]->print($c[$i],"\t",join("\t", @l), "\n");
+        }
     }
 }
-foreach (@out_fh) {
+foreach (@tmp_files) {
     close;
 }
 close $in;
 
 if (! defined $global_options->{'temp'}) {
-    my $files = join (" ", @names);
+    my $files = join (" ", @file_names);
     `ktImportText -o $output_file_name $files`
 }
 
 if (! defined $global_options->{'keep'}) {
-    unlink @names;
+    unlink @file_names;
 }
 
 exit;
@@ -93,7 +138,7 @@ sub checkParams {
     #-----
     # Do any and all options checking here...
     #
-    my @standard_options = ( "help|h+", "keep|k+", "temp|t+", "input|i:s", "output|o:s" );
+    my @standard_options = ( "help|h+", "keep|k+", "temp|t+", "input|i:s", "output|o:s", "pyrotagger|p+" );
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -198,5 +243,6 @@ __DATA__
       [-temp -t]                   Only produce the temorary files in Krona format without
                                    running krona
       [-output -o]                 Name of the output html file produced by krona [default: text.krona.html]
+      [-pyrotagger -p]             Input OTU table is in pyrotagger format
          
 =cut
