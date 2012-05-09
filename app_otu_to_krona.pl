@@ -88,9 +88,6 @@ my @file_names = map{$_.".krona.tmp.otus"} @sample_names;
 while(<$in>) {
     chomp;
     my @otus;
-    if($global_options->{"pyrotagger"}) {
-        s/\s+$//;
-    }
     my @c = split(/\t/, $_);
     if($global_options->{"pyrotagger"}) {
         
@@ -98,13 +95,13 @@ while(<$in>) {
         # therefore the elements of the array 
         next if($#c <( $number_of_samples + $base_columns));
 
-        @otus = @c[1, $number_of_samples];
+        @otus = @c[1 .. $number_of_samples];
+        # pyrotagger outputs a blank rather than 0, need to fix that
+        $_ ||= '0' for @otus;
         my $tax_string = join("\t", splice(@c, $number_of_samples + $base_columns));
         my @full_name = splice(@c,-3,1);
         $tax_string .= "\t".$full_name[0];
 
-        # pyrotagger outputs a blank rather than 0, need to fix that
-        $_ ||= '0' for @otus;
         foreach my $i (0 .. $#otus) {
             $tmp_files[$i]->print($otus[$i],"\t", $tax_string, "\n");
         }
