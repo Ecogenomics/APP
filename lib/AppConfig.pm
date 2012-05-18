@@ -83,7 +83,8 @@ our @EXPORT=qw(
     $sn_otus_file
     $sn_otu_table_file
     $sn_tree_file
-    $global_mapping_file 
+    $global_mapping_file
+    %acacia_config_hash
     $QIIME_split_out
     $QIIME_split_out_qual
     $QIIME_TAX_tax_file
@@ -476,16 +477,20 @@ sub splitLibraries
     #-----
     # Wrapper for Qiime split libraries
     #
-    my ($job_ID) = @_;
+    my ($job_ID, $params) = @_;
     print "Splitting libraries...\n";
-    checkAndRunCommand("split_libraries.py", [{-m => $QIIME_map_file,
-                                               -f => "../$job_ID.fna",
-                                               -q => "../$job_ID.qual",
-                                               -b => $global_barcode_length,
-                                               -a => 2,
-                                               -H => 10,
-                                               -M => 1,
-                                               -d => ''}], DIE_ON_FAILURE);
+    my $default_params = {-m => $QIIME_map_file,
+                          -f => "../$job_ID.fna",
+                          -q => "../$job_ID.qual",
+                          -b => $global_barcode_length,
+                          -a => 2,
+                          -H => 10,
+                          -M => 1,
+                          -d => ''};
+    foreach my $key (keys %{$params}) {
+        $default_params->{$key} = $params->{$key}
+    }
+    checkAndRunCommand("split_libraries.py", [$default_params], DIE_ON_FAILURE);
 }
 
 sub removeChimeras
@@ -564,10 +569,14 @@ sub getReadCounts
         next if(!($_ =~ /^>/));
         my @f1 = split /_/, $_;
         my @f2 = split />/, $f1[0];
-        my $fl =$f2[1];  
+        my $fl =$f2[1];
         foreach my $uid (keys %global_samp_ID_list)
         {
-            if($fl =~ /^$uid/)
+            # QIIME replaces _ with . in Sample IDs, need to make the correction
+            # here or keys in the hash won't be found in the output sequence
+            # file.
+            my $qiimeified_uid = qiimeify_uid($uid);
+            if($fl =~ /^$qiimeified_uid/)
             {
                 # this guy begins with the exact MID
                 $global_raw_counts{$uid}++;
@@ -585,7 +594,8 @@ sub getReadCounts
         my $fl =$f2[1];  
         foreach my $uid (keys %global_samp_ID_list)
         {
-            if($fl =~ /^$uid/)
+            my $qiimeified_uid = qiimeify_uid($uid);
+            if($fl =~ /^$qiimeified_uid/)
             {
                 # this guy begins with the exact MID
                 $global_chimer_counts{$uid}++;
@@ -603,7 +613,8 @@ sub getReadCounts
         my $fl =$f2[1];  
         foreach my $uid (keys %global_samp_ID_list)
         {
-            if($fl =~ /^$uid/)
+            my $qiimeified_uid = qiimeify_uid($uid);
+            if($fl =~ /^$qiimeified_uid/)
             {
                 # this guy begins with the exact MID
                 $global_acacia_counts{$uid}++;
@@ -618,30 +629,49 @@ sub parseConfigQA
     #-----
     # parse the app config file and produce a qiime mappings file
     #
-    my ($config_prefix) = @_;
+    my ($config_prefix, $return_params_hash) = @_;
     open my $conf_fh, "<", $config_prefix or die $!;
     open my $mapping, ">", $global_mapping_file or die $!;
     print $mapping "$FNB_HEADER\n";
+    my $used_sample_count = 0;
+    # Parse the sample information.
     while(<$conf_fh>)
     {
         next if($_ =~ /^#/);
         last if($_ =~ /^@/);
         chomp $_;
         my @fields = split /\t/, $_;
-
+        if ($fields[0] =~ /_/) {
+            die "ERROR: Sample ID ". $fields[0] . " contains an underscore ".
+            "(_) and this can cause APP to fail (as QIIME replaces the underscore).\n" .
+            "Remove the underscore from the Sample ID in the config file and rerun
+            APP_do_QA.pl.\n\n";
+        }
+        use Data::Dumper;
         # save the MID for later
         $global_samp_ID_list{$fields[$FNA{'SampleID'}]} = $fields[$FNA{'USE'}];
         $global_raw_counts{$fields[$FNA{'SampleID'}]} = 0;
         $global_chimer_counts{$fields[$FNA{'SampleID'}]} = 0;
         $global_acacia_counts{$fields[$FNA{'SampleID'}]} = 0;
 
-        if("1" eq $fields[$FNA{'USE'}])
+        if(! ("0" eq $fields[$FNA{'USE'}]))
         {
+            $used_sample_count++;
             print $mapping "$fields[$FNA{'SampleID'}]\t$fields[$FNA{'BarcodeSequence'}]\t$fields[$FNA{'LinkerPrimerSequence'}]\t$fields[$FNA{'Description'}]\n";
         }
     }
+    if ($return_params_hash) {
+        while(<$conf_fh>) {
+            next if($_ =~ /^#/);
+            chomp $_;
+            if ($_ =~ /^(.*?)=(.*)$/) {
+                $return_params_hash->{$1} = $2;
+            }
+        }    
+    }
     close $conf_fh;
     close $mapping;
+    return $used_sample_count;
 }
 
 sub updateConfigQA
@@ -653,13 +683,23 @@ sub updateConfigQA
     my ($config_prefix) = @_;
     open my $conf_fh, "<", "../$config_prefix" or die $!;
     open my $conf_fh_tmp, ">", "../$config_prefix.tmp" or die $!;
+    use Data::Dumper;
     while(<$conf_fh>)
     {
         if($_ =~ /^#/) { print $conf_fh_tmp $_; next; }
         if($_ =~ /^@/) { print $conf_fh_tmp $_; last; }
         chomp $_;
         my @fields = split /\t/, $_;
-        print $conf_fh_tmp "$fields[$FNA{'SampleID'}]\t$fields[$FNA{'BarcodeSequence'}]\t$fields[$FNA{'LinkerPrimerSequence'}]\t$fields[$FNA{'Description'}]\t$global_raw_counts{$fields[$FNA{'SampleID'}]}\t$global_chimer_counts{$fields[$FNA{'SampleID'}]}\t$global_acacia_counts{$fields[$FNA{'SampleID'}]}\t$fields[$FNA{'USE'}]\n";
+        #print Dumper(@fields);
+        #print Dumper(\%global_raw_counts);
+        print $conf_fh_tmp join("\t", ($fields[$FNA{'SampleID'}],
+                                       $fields[$FNA{'BarcodeSequence'}],
+                                       $fields[$FNA{'LinkerPrimerSequence'}],
+                                       $fields[$FNA{'Description'}],
+                                       $global_raw_counts{$fields[$FNA{'SampleID'}]},
+                                       $global_chimer_counts{$fields[$FNA{'SampleID'}]},
+                                       $global_acacia_counts{$fields[$FNA{'SampleID'}]},
+                                       $fields[$FNA{'USE'}])), "\n";
     }
     
     # just print out the rest of the file
@@ -699,6 +739,12 @@ sub returnAcaciaConfigString {
         %config_hash = %{$config_hash_ref};
     };
     return join("\n", map({$_ ."=" .$config_hash{$_}} sort {$a cmp $b} keys %config_hash));
+}
+
+sub qiimeify_uid {
+    my $qiimeified_uid = shift;
+    $qiimeified_uid =~ s/_/./g;
+    return $qiimeified_uid;
 }
 
 1;

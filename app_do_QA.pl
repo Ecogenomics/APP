@@ -72,14 +72,26 @@ getWorkingDirs($options->{'config'});
 # make the output directories
 makeOutputDirs("");
 
+my $QA_params = {};
 # parse the config file
-parseConfigQA($options->{'config'});
+if (! parseConfigQA($options->{'config'}, $QA_params)) {
+    croak "No samples were selected for analysis, correct the USE column in " .
+        "config file\n";    
+};
+
+
+my $split_library_params;
+if ($QA_params->{ION_TORRENT}) {    
+    $split_library_params = {-l => 150,
+                             -s => 15};
+    $acacia_config_hash{TRIM_TO_LENGTH} = 150;
+}
 
 print "All good!\n";
 
 #### start the $QA_dir pipeline!
 chdir "$global_working_dir/$QA_dir";
-splitLibraries($job_ID);
+splitLibraries($job_ID, $split_library_params);
 removeChimeras();
 denoise();
 
