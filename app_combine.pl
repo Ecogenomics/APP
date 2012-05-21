@@ -73,12 +73,9 @@ if(exists $options->{'output'})
 $global_combined_base =~ s/\/$//;
 
 # acacia config file
-if(exists $options->{'acacia_conf'})
-{
-    # user supplied config file
-    $global_acacia_config = $options->{'acacia_conf'};
+if (defined($options->{'acacia_conf'})) {
+    updateAcaciaConfigHash($options->{'acacia_conf'})
 }
-if (!(-e $global_acacia_config)) { die "Acacia config file: $global_acacia_config does not exist!\n"; }
 
 print "All good!\n";
 
@@ -200,6 +197,8 @@ denoise();
 print "Fixing read counts...\n";
 getReadCounts();
 updateConfigQA("app_$global_combined_base.config");
+
+print "QA complete!\n";
 
 ######################################################################
 # CUSTOM SUBS

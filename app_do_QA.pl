@@ -100,6 +100,8 @@ print "Fixing read counts...\n";
 getReadCounts();
 updateConfigQA($options->{'config'});
 
+print "QA complete!\n";
+
 ######################################################################
 # CUSTOM SUBS
 ######################################################################
