@@ -87,6 +87,10 @@ if ($QA_params->{ION_TORRENT}) {
     $acacia_config_hash{TRIM_TO_LENGTH} = 150;
 }
 
+if ($QA_params->{ACACIA_TRIM_TO_LENGTH}) {    
+    $acacia_config_hash{TRIM_TO_LENGTH} = $QA_params->{ACACIA_TRIM_TO_LENGTH};
+}
+
 print "All good!\n";
 
 #### start the $QA_dir pipeline!
