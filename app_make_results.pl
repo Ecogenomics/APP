@@ -1000,7 +1000,7 @@ sub parse_config_results
 # TEMPLATE SUBS
 ######################################################################
 sub checkParams {
-    my @standard_options = ( "help|h+", "config|c:s", "identity|i:i", "e:i",
+    my @standard_options = ( "help|h+", "config|c:s", "identity|i:i", "e:f",
                              "b|blast:s", "t|taxonomy:s", "i|imputed:s");
     my %options;
 
