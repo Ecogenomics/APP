@@ -17,7 +17,7 @@
 \newenvironment{command}{\everypar{\hangindent=4em\hangafter=2}}
 
 % Variables used within the document
-\newcommand{\currentVersion}{2.0.0}
+\newcommand{\currentVersion}{2.0.5}
 \newcommand{\frankenQIIMEVersion}{1.1.0}
 \end_preamble
 \options intoc,bibliography=totoc,index=totoc,BCOR7.5mm,captions=tableheading
@@ -287,36 +287,68 @@ Initialising APP
 \end_layout
 
 \begin_layout Standard
-Regardless of which part APP will be used, environmental variables required
+There are several versions of APP available to the end user.
+ At the moment there are two major releases of APP, versions 1 and 2.
+ Version 1 has now been deprecated, provided only for backwards compatibility.
+ Version 2 is now the active development branch, and it is 
+\emph on
+HIGHLY
+\emph default
+ recommended that you use this version.
+ Regardless of which APP will be used, environmental variables required
  by APP will need to be exported.
  This is achieved by loading the APP module.
- After logging into Luca, load APP as follows:
+ The following subsections describe how to load either version of APP.
+\end_layout
+
+\begin_layout Subsection
+Loading APP 2
+\end_layout
+
+\begin_layout Standard
+The latest release of APP can always be loaded using the following command:
 \end_layout
 
 \begin_layout Quote
 
 \family typewriter
-$ module load app/
-\begin_inset ERT
-status open
-
-\begin_layout Plain Layout
-
-
-\backslash
-currentVersion
-\end_layout
-
-\end_inset
-
-
+$ module load app/latest
 \end_layout
 
 \begin_layout Standard
-Older versions of APP required QIIME to be loaded separately, however with
- the newer versions of APP, QIIME (specifically FrankenQIIME) is loaded
- automatically to ensure correct versioning.
- If the APP Version 1 is to be loaded, 
+Older versions on the APP 2 branch (of the form 2.x.x) can be loaded explicitly
+ using the following command:
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+$ module load app/2.x.x
+\end_layout
+
+\begin_layout Standard
+In any case, all versions on the APP 2 branch automatically load dependencies
+ to ensure correct versioning.
+\end_layout
+
+\begin_layout Subsection
+Loading APP 1 (deprecated)
+\end_layout
+
+\begin_layout Standard
+APP 1 is provided for backwards compatibility purposes and the code is no
+ longer updated.
+ APP 1 can be loaded using the following command:
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+$ module load app/1.0.0
+\end_layout
+
+\begin_layout Standard
+Older versions of APP require 
 \begin_inset Quotes eld
 \end_inset
 
@@ -324,25 +356,19 @@ vanilla
 \begin_inset Quotes erd
 \end_inset
 
- QIIME will need to be loaded independently.
- It can be loaded using the following command: 
+ QIIME separately:
 \end_layout
 
 \begin_layout Quote
 
 \family typewriter
-$ module load qiime 
-\shape italic
-# Only do this for app versions 1.x.x
+$ module load qiime
 \end_layout
 
 \begin_layout Standard
-You can alternatively choose to load FrankenQIIME to gain access to added
- functionality, but backwards compatibility is not guaranteed and APP may
- fail as a result.
- In either case, loading APP (and possibly QIIME depending on the version
- of APP) will also load all dependencies such as R, uclust and ACACIA.
- 
+Note that all further documentation refers to the APP2 branch and example
+ commands may not work with the APP 1 branch.
+ Please see the original APP documentation for information about APP 1.
 \end_layout
 
 \begin_layout Section

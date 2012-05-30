@@ -149,6 +149,11 @@ if($global_comp_DB_type eq "SILVA")
     $TAX_blast_file = $SILVA_TAX_blast_file;
     $TAX_aligned_blast_file = $SILVA_TAX_aligned_blast_file;
     $imputed_file = $SILVA_imputed_file;
+} elsif ($global_comp_DB_type eq "MERGED") {
+    print "APP can only generate and normalise OTU tables using the merged database.\n";
+    print "Alpha and Beta diversities will need to be performed manually.\n";
+    $TAX_tax_file = $MERGED_TAX_tax_file;
+    $TAX_blast_file = $MERGED_TAX_blast_file;
 }
 
 #### Check the user options and override if required
@@ -253,10 +258,20 @@ checkAndRunCommand("reformat_otu_table.py",  [{-i => "$tn_otu_table_file",
                                                -t => $nn_rep_set_tax_assign,
                                                -o => "$tn_otu_table_file.expanded"}], IGNORE_FAILURE);
 
+# Merged database 
+if ($global_comp_DB_type eq "MERGED") {
+    print "APP only supports OTU table generation and normalisation for the SILVA/GG merged database.\n";
+    print "Stopping here.\n";
+    exit(0);   
+}
+
+
 print "Summarizing by taxa.....\n";
 
 checkAndRunCommand("summarize_taxa.py", [{-i => "$tn_otu_table_file",
                                           -o => "$global_TB_results_dir/breakdown_by_taxonomy/"}], DIE_ON_FAILURE);
+
+
 
 # move 100 of the 100 tables just produced into a new folder for jacknifing
 print "Jackknifing in preparation for beta diversity\n";
@@ -897,6 +912,9 @@ sub parse_config_results
                if($fields[1] eq "SILVA")
                 {
                     $global_comp_DB_type = "SILVA";
+                } elsif($fields[1] eq "MERGED")
+                {
+                    $global_comp_DB_type = "MERGED";
                 } 
             }
             elsif($fields[0] eq "NORMALISE")

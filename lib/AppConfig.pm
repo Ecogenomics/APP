@@ -95,7 +95,11 @@ our @EXPORT=qw(
     $SILVA_TAX_tax_file
     $SILVA_TAX_blast_file
     $SILVA_TAX_aligned_blast_file
-    $SILVA_imputed_file 
+    $SILVA_imputed_file
+    $MERGED_TAX_tax_file
+    $MERGED_TAX_blast_file
+    $MERGED_TAX_aligned_blast_file
+    $MERGED_imputed_file 
     $global_R_log_file
     checkFileExists
     checkAndRunCommand
@@ -241,10 +245,19 @@ our $QIIME_TAX_tax_file = "$QIIME_GG_TAX_ROOT/taxonomies/greengenes_tax.txt";
 our $QIIME_TAX_blast_file = "$QIIME_GG_TAX_ROOT/rep_set/gg_99_otus_4feb2011.fasta";
 our $QIIME_TAX_aligned_blast_file = "$QIIME_GG_TAX_ROOT/rep_set/gg_99_otus_4feb2011_aligned.fasta";
 our $QIIME_imputed_file = "/srv/whitlam/bio/db/gg/qiime_default/core_set_aligned.fasta.imputed";
+
+#SILVA DBs
 our $SILVA_TAX_tax_file = "/srv/whitlam/bio/db/Silva/QIIME_files/taxonomy_mapping/Silva_taxa_mapping_104set_97_otus.txt";
 our $SILVA_TAX_blast_file = "/srv/whitlam/bio/db/Silva/QIIME_files/rep_set/silva_104_rep_set.fasta";
 our $SILVA_TAX_aligned_blast_file = "/srv/whitlam/bio/db/Silva/QIIME_files/rep_set/silva_104_rep_set_aligned.fasta";
 our $SILVA_imputed_file = "/srv/whitlam/bio/db/Silva/QIIME_files/core_aligned_set/core_Silva_aligned.fasta";
+
+# Merged DBs (GG Bacteria + Archaea with Silva Eukaryotes)
+our $MERGED_TAX_tax_file = "/srv/whitlam/bio/db/merged_gg_silva/merged_gg_silva_taxo.txt";
+our $MERGED_TAX_blast_file = "/srv/whitlam/bio/db/merged_gg_silva/merged_gg_silva.fna";
+
+
+
 our $CHIME_good_file = "good.fasta";
 our $CHIME_bad_file = "ch.fasta";
 our $ACACIA_out_file = "acacia_out_all_tags.seqOut";
