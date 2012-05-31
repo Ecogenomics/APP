@@ -77,6 +77,10 @@ if (defined($options->{'acacia_conf'})) {
     updateAcaciaConfigHash($options->{'acacia_conf'})
 }
 
+if (defined($options->{'length'})) {
+    $acacia_config_hash{TRIM_TO_LENGTH} = $options->{'length'};
+}
+
 print "All good!\n";
 
 # get job and sample names
@@ -293,7 +297,7 @@ sub recombine_fnas
 # TEMPLATE SUBS
 ######################################################################
 sub checkParams {
-    my @standard_options = ( "help|h+", "jobs|j:s", "output|o:s",  "acacia_conf:s", "SILVA+");
+    my @standard_options = ( "help|h+", "jobs|j:s", "output|o:s",  "length|l:i", "acacia_conf:s", "SILVA+");
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -310,7 +314,7 @@ sub checkParams {
 
     # Compulsosy items
     if(!exists $options{'jobs'} ) { print "**ERROR: you MUST supply at least two job folders\n"; exec("pod2usage $0"); }
-    #if(!exists $options{''} ) { print "**ERROR: \n"; exec("pod2usage $0"); }
+    if(!exists $options{'length'} ) { print "**ERROR: you MUST supply a length to trim reads to\n"; exec("pod2usage $0"); }
 
     return \%options;
 }
@@ -357,9 +361,10 @@ __DATA__
 
 =head1 SYNOPSIS
 
-    app_combine.pl -jobs|j JOB_ID[.SAMPLE_ID],JOB_ID[.SAMPLE_ID][,JOB_ID[.SAMPLE_ID][,...]] [-acacia_conf CONFIG_FILE] [-output|o FOLDER] [-SILVA] [-help|h]
+    app_combine.pl -jobs|j JOB_ID[.SAMPLE_ID],JOB_ID[.SAMPLE_ID][,JOB_ID[.SAMPLE_ID][,...]] [-acacia_conf CONFIG_FILE] -length|l TRIM_LENGTH [-output|o FOLDER] [-SILVA] [-help|h]
 
       -jobs -j                      APP job folders and possibly sample numbers (must be at aleast two)
+      -length -l                    Trim all reads to this length (bp).
       [-acacia_conf CONFIG_FILE]    Alternate acacia config file (Full path!)
       [-output|o FOLDER]            Folder to write the results to [default: ac]
       [-SILVA]                      Use the SILVA database
@@ -382,8 +387,8 @@ __DATA__
 
       Examples:
       
-      app_combine.pl -j 56.3,56.8,57.2          # combines samples 3 and 8 from Job 56 and sample 2 from job 57
-      app_combine.pl -j 56.3,56.8,57,59.108     # combines samples 3 and 8 from Job 56, all samples from job 57 and sample 108 from job 59
+      app_combine.pl -j 56.3,56.8,57.2 -l 230   # combines samples 3 and 8 from Job 56 and sample 2 from job 57 and trims them to 230 bp
+      app_combine.pl -j 56.3,56.8,57,59.108 -l 350   # combines samples 3 and 8 from Job 56, all samples from job 57 and sample 108 from job 59 and trims them to 350 bp.
       
 =cut
 

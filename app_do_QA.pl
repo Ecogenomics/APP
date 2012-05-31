@@ -57,6 +57,11 @@ if (defined($options->{'acacia_conf'})) {
     updateAcaciaConfigHash($options->{'acacia_conf'})
 }
 
+if (defined($options->{'length'})) {
+    $acacia_config_hash{TRIM_TO_LENGTH} = $options->{'length'};
+}
+
+
 # get the Job_ID we're working on
 my $job_ID = basename($options->{'config'});
 if ($job_ID =~ /app_(.*).config$/) {
@@ -87,9 +92,9 @@ if ($QA_params->{ION_TORRENT}) {
     $acacia_config_hash{TRIM_TO_LENGTH} = 150;
 }
 
-if ($QA_params->{ACACIA_TRIM_TO_LENGTH}) {    
-    $acacia_config_hash{TRIM_TO_LENGTH} = $QA_params->{ACACIA_TRIM_TO_LENGTH};
-}
+#if ($QA_params->{ACACIA_TRIM_TO_LENGTH}) {    
+#    $acacia_config_hash{TRIM_TO_LENGTH} = $QA_params->{ACACIA_TRIM_TO_LENGTH};
+#}
 
 print "All good!\n";
 
@@ -116,7 +121,7 @@ print "QA complete!\n";
 # TEMPLATE SUBS
 ######################################################################
 sub checkParams {
-    my @standard_options = ( "help|h+", "config|c:s", "acacia_conf:s" );
+    my @standard_options = ( "help|h+", "config|c:s",  "length|l:i", "acacia_conf:s" );
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -133,6 +138,7 @@ sub checkParams {
 
     # Compulsosy items
     if(!exists $options{'config'} ) { print "**ERROR: you MUST give a config file\n"; exec("pod2usage $0"); }
+    if(!exists $options{'length'} ) { print "**ERROR: you MUST supply a length to trim reads to\n"; exec("pod2usage $0"); }
     #if(!exists $options{''} ) { print "**ERROR: \n"; exec("pod2usage $0"); }
 
     return \%options;
@@ -180,9 +186,10 @@ __DATA__
 
 =head1 SYNOPSIS
 
-    app_do_QA.pl -c|config CONFIG_FILE [-help|h]
+    app_do_QA.pl -c|config CONFIG_FILE -l|length TRIM_LENGTH [-help|h]
 
       -c CONFIG_FILE               app config file to be processed
+      -l TRIM_LENGTH               Trim all reads to this length (bp).
       [-acacia_conf CONFIG_FILE]   alternate acacia config file (Full path!)
       [-help -h]                   Displays basic usage information
          

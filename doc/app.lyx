@@ -17,7 +17,7 @@
 \newenvironment{command}{\everypar{\hangindent=4em\hangafter=2}}
 
 % Variables used within the document
-\newcommand{\currentVersion}{2.0.5}
+\newcommand{\currentVersion}{2.0.8}
 \newcommand{\frankenQIIMEVersion}{1.1.0}
 \end_preamble
 \options intoc,bibliography=totoc,index=totoc,BCOR7.5mm,captions=tableheading
@@ -531,12 +531,13 @@ split_libraries.py
  Secondly, chimera detection and removal using usearch (uclust).
  Finally, denoising using Acacia.
  To run the QA stage, run app_do_AQ.pl passing the app config file as a parameter.
+ You will also need to specify a length (in bp) to trim the reads.
 \end_layout
 
 \begin_layout Quote
 
 \family typewriter
-$ app_do_QA.pl -c app_100.config
+$ app_do_QA.pl -c app_100.config -l 350
 \end_layout
 
 \begin_layout Standard
