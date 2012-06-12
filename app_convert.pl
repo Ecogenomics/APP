@@ -95,47 +95,39 @@ while(<$pdb_fh>)
 close $pdb_fh;
 
 # open the in file
-open my $in_fh, "<", $options->{'caliper'} or die "Cannot open input file $!";
-# kill the header
-<$in_fh>;
-# read each line
-while(<$in_fh>)
-{
-    chomp $_;
-    my @line_fields = split(/,/, $_);
-    next if($line_fields[1] =~ /^Ladd/);
-    next if($line_fields[2] eq "");
-    
-    my $well = $line_fields[1];
-    if(exists($global_well_primer_hash{$well}))
+open my $in_fh, "<", $options->{'concentration'} or die "Cannot open input file $!";
+if (defined ($options->{'caliper'})) {
+    # kill the header
+    <$in_fh>;
+    # read each line
+    while(<$in_fh>)
     {
-        my $primer = $global_well_primer_hash{$well};
-        my $rec_length = int($line_fields[2]);
+        chomp $_;
+        my @line_fields = split(/,/, $_);
+        next if($line_fields[1] =~ /^Ladd/);
+        next if($line_fields[2] eq "");
         
-        # check to see if everything is within bounds
-        if($rec_length > $global_prim_len_lower_hash{$primer})
-        {
-            if($rec_length < $global_prim_len_upper_hash{$primer})
-            {
-                # check to see we're only adding this guy once
-                if(exists $global_well_conc_hash{$well})
-                {
-                    print "WARNING: Two possible concentration values for well $well.\n";
-                    print "\tLast time:\t{$global_well_len_hash{$well} AT $global_well_conc_hash{$well}}\n";
-                    print "\tThis time:\t{$line_fields[2] AT $line_fields[3], primer: $primer, length: $APP_prim_len_hash{$primer}\n";
-                    if($line_fields[3] > $global_well_conc_hash{$well})
-                    {
-                        $global_well_conc_hash{$well} = $line_fields[3];
-                        $global_well_len_hash{$well} = $line_fields[2];                      
-                    }
-                    print "\tKeeping:\t{$global_well_len_hash{$well} AT $global_well_conc_hash{$well}}\n";
-                }
-                else
-                {
-                    $global_well_conc_hash{$well} = $line_fields[3];
-                    $global_well_len_hash{$well} = $line_fields[2];
-                }
+        add_well_data($line_fields[1], int($line_fields[2]), $line_fields[3]); 
+    }
+} else {
+    while (my $line = <$in_fh>) {
+        chomp $line;
+        if (! $line) {
+            next
+        };
+        my @splitline = split /, /, $line;
+        my $well = $splitline[0];
+        while (my $line = <$in_fh>) {
+            chomp $line;
+            if ($line =~ /^\s*$/) {
+                last
+            };
+            my @splitline = split /, /, $line;
+            # Skip if its a header line or a marker
+            if (($splitline[0] !~ /^\d+$/) || ($splitline[8] =~ /Marker/)) {
+                next;
             }
+            add_well_data($well, int($splitline[2]), $splitline[3]); 
         }
     }
 }
@@ -168,12 +160,52 @@ print "All done...\n";
 # CUSTOM SUBS
 ######################################################################
 
+sub is_between {
+    my ($value, $lower_bound, $upper_bound) = @_;
+    if (($value <= $upper_bound) && ($value >= $lower_bound)) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+
+sub add_well_data {
+    my ($well, $product_length, $conc) = @_;
+    if(exists($global_well_primer_hash{$well}))
+    {
+        my $primer = $global_well_primer_hash{$well};
+        
+        # check to see if everything is within bounds
+        if(is_between($product_length, $global_prim_len_lower_hash{$primer}, $global_prim_len_upper_hash{$primer}))
+        {
+            # check to see we're only adding this guy once
+            if(exists $global_well_conc_hash{$well})
+            {
+                print "WARNING: Two possible concentration values for well $well.\n";
+                print "\tLast time:\t{$global_well_len_hash{$well} AT $global_well_conc_hash{$well}}\n";
+                print "\tThis time:\t{$product_length AT $conc, primer: $primer, length: $APP_prim_len_hash{$primer}\n";
+                if($conc > $global_well_conc_hash{$well})
+                {
+                    $global_well_conc_hash{$well} = $conc;
+                    $global_well_len_hash{$well} = $product_length;                      
+                }
+                print "\tKeeping:\t{$global_well_len_hash{$well} AT $global_well_conc_hash{$well}}\n";
+            }
+            else
+            {
+                $global_well_conc_hash{$well} = $conc;
+                $global_well_len_hash{$well} = $product_length;
+            }
+        }
+    }
+}
 
 ######################################################################
 # TEMPLATE SUBS
 ######################################################################
 sub checkParams {
-    my @standard_options = ( "help|h+", "caliper|c:s", "pdbe|p:s", "out|o:s", "dilution|d:f", "tolerance|t:f" );
+    my @standard_options = ( "help|h+", "concentration|c:s", "pdbe|p:s", "out|o:s", "dilution|d:f", "tolerance|t:f", "caliper");
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -189,7 +221,7 @@ sub checkParams {
     exec("pod2usage $0") if $options{'help'};
 
     # Compulsosy items
-    if(!exists $options{'caliper'} ) { print "**ERROR: You need to supply an input file produced by caliper\n"; exec("pod2usage $0"); }
+    if(!exists $options{'concentration'} ) { print "**ERROR: You need to supply an input concentration file\n"; exec("pod2usage $0"); }
     if(!exists $options{'pdbe'} ) { print "**ERROR: You need to supply an EPI conversion file produced by PyroDB\n"; exec("pod2usage $0"); }
     #if(!exists $options{''} ) { print "**ERROR: \n"; exec("pod2usage $0"); }
     
@@ -234,20 +266,24 @@ __DATA__
 
 =head1 DESCRIPTION
 
-   Convert a caliper produced peaks csv file to a format suitable for app_csv2epi.pl
+    Convert a concentration csv file (caliper or tapestation produced) to a
+    format suitable for app_csv2epi.pl.
 
 =head1 SYNOPSIS
 
     app_convert.pl -in CSV [-out CSV] [-help|h]
    
-    Convert a caliper produced peaks csv file to a format suitable for app_csv2epi.pl
+    Convert a concentration csv file (caliper or tapestation produced) to a
+    format suitable for app_csv2epi.pl
  
-    -caliper|c CSV               Caliper generated csv file to convert
+    -concentration|c CSV         Concentration csv file to convert (default: tapestation format)
     -pdbe|p CSV                  Epi conversion file from PyroDB
     [-dilution|d FLOAT]          Amount samples were diluted by before being run through caliper (Multiply by this number [default: 1])
     [-tolerance|t FLOAT]         Tolerance above and below reported primer length [default: 0.1 (10%)]
     [-out|o CSV]                 Optional output name [default: converted.csv]
+    [-caliper]                   The input file is in caliper format
     [-help -h]                   Displays basic usage information
+    
 
 =cut
 
