@@ -112,17 +112,19 @@ if (defined ($options->{'caliper'})) {
 } else {
     while (my $line = <$in_fh>) {
         chomp $line;
-        if (! $line) {
+        $line =~ s/ ,/,/g;
+        my @splitline = split /,/, $line;
+        if ($splitline[0] eq '') {
             next
         };
-        my @splitline = split /, /, $line;
         my $well = $splitline[0];
         while (my $line = <$in_fh>) {
             chomp $line;
-            if ($line =~ /^\s*$/) {
+            $line =~ s/ ,/,/g;
+            my @splitline = split /,/, $line;
+            if ($splitline[0] eq '') {
                 last
             };
-            my @splitline = split /, /, $line;
             # Skip if its a header line or a marker
             if (($splitline[0] !~ /^\d+$/) || ($splitline[8] =~ /Marker/)) {
                 next;
