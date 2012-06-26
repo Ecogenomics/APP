@@ -17,7 +17,7 @@
 \newenvironment{command}{\everypar{\hangindent=4em\hangafter=2}}
 
 % Variables used within the document
-\newcommand{\currentVersion}{2.0.8}
+\newcommand{\currentVersion}{2.1.2}
 \newcommand{\frankenQIIMEVersion}{1.1.0}
 \end_preamble
 \options intoc,bibliography=totoc,index=totoc,BCOR7.5mm,captions=tableheading
@@ -369,56 +369,6 @@ $ module load qiime
 Note that all further documentation refers to the APP2 branch and example
  commands may not work with the APP 1 branch.
  Please see the original APP documentation for information about APP 1.
-\end_layout
-
-\begin_layout Section
-Sample Pooling
-\end_layout
-
-\begin_layout Standard
-APP provides several Perl scripts which allow the conversion of PCR product
- concentration csv files produced by Caliper into a pooling instruction
- file for the Eppendorf robot.
- This is a two step process.
- Firstly, the Caliper generated csv file and a PyroDB EPI conversion file
- (sourced from the particular gasket page of PyroDB) is converted to a intermedi
-ate csv using the following command:
-\end_layout
-
-\begin_layout Quote
-
-\family typewriter
-$ app_convert.pl -c 
-\shape italic
-caliper_csv_file
-\shape default
- -p 
-\shape italic
-pyrodb_epi_file
-\shape default
- [-o 
-\shape italic
-csv_result_file
-\shape default
-]
-\end_layout
-
-\begin_layout Standard
-Secondly, the csv file created by app_convert.pl needs to be converted into
- a file that can be used on the Eppendorf robot, and this is achieved by
- using the following command:
-\end_layout
-
-\begin_layout Quote
-
-\family typewriter
-$ app_csv2epi.pl -i 
-\shape italic
-csv_result_file
-\shape default
- -p 
-\shape italic
-output_prefix
 \end_layout
 
 \begin_layout Section
@@ -1138,6 +1088,257 @@ name "sec:Script-Reference"
 \end_layout
 
 \begin_layout Section
+app_munge_sff.pl
+\end_layout
+
+\begin_layout Minisec
+Summary
+\end_layout
+
+\begin_layout Standard
+Splits a raw sff file into job specific folders and creates app_config files.
+\end_layout
+
+\begin_layout Minisec
+Syntax
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+$ app_munge_sff.pl -p
+\shape italic
+ sff_prefix
+\shape default
+ [-l 
+\shape italic
+min_seq_length]
+\shape default
+ [-cleanup]
+\end_layout
+
+\begin_layout Minisec
+Input Files
+\end_layout
+
+\begin_layout Subsubsection*
+Details
+\end_layout
+
+\begin_layout Minisec
+Output Files
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+nopagebreak
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Tabular
+<lyxtabular version="3" rows="9" columns="2">
+<features tabularvalignment="middle">
+<column alignment="left" valignment="top" width="0">
+<column alignment="left" valignment="top" width="10cm">
+<row>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+File/Directory
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Description
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
 app_do_QA.pl
 \end_layout
 
@@ -1162,6 +1363,10 @@ $ app_do_QA.pl -c
 \shape italic
  app_config_file
 \shape default
+ -l 
+\shape italic
+trim_length
+\shape default
  [-acacia_conf
 \shape italic
  acacia_config_file
@@ -1175,13 +1380,15 @@ Input Files
 
 \begin_layout Standard
 app_do_QA.pl expects a FASTA and Quality file to be in the current working
- directory as well as the 
-\family typewriter
-\shape italic
-app_config_file
-\family default
-\shape default
- passed to the script to exist.
+ directory as well as a APP config file (the format of this file is described
+ in 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "sec:APP-Config-File"
+
+\end_inset
+
+).
  In addition, the config file needs to be named of the form app_
 \shape italic
 prefix
@@ -1201,6 +1408,22 @@ prefix
  can be any string (as long as the filename is valid).
 \end_layout
 
+\begin_layout Subsubsection*
+Details
+\end_layout
+
+\begin_layout Standard
+app_do_QA.pl is responsible for the QA of raw data before its analysis with
+ app_make_results.pl (wrapper for QIIME + additional scripts).
+ Firstly, it takes the provided APP config file and generates a QIIME mapping
+ file, which is then used along with the provided FASTA and Quality files
+ to run split_libraries.py from QIIME.
+ The output is then provided to uclust in order to remove chimeric sequences.
+ Non-chimeric sequences are then provided to ACACIA for denoising, and completio
+n of ACACIA signifies the end of the QA pipeline.
+ 
+\end_layout
+
 \begin_layout Minisec
 Output Files
 \end_layout
@@ -1208,25 +1431,38 @@ Output Files
 \begin_layout Standard
 This script will create a directory called 'QA' in the current working directory.
  Contained within this directory are the following files.
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+nopagebreak
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Standard
 \begin_inset Tabular
-<lyxtabular version="3" rows="11" columns="2">
+<lyxtabular version="3" rows="9" columns="2">
 <features tabularvalignment="middle">
-<column alignment="center" valignment="top" width="0">
-<column alignment="center" valignment="top" width="0">
+<column alignment="left" valignment="top" width="0">
+<column alignment="left" valignment="top" width="10cm">
 <row>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
-File
+File/Directory
 \end_layout
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1237,7 +1473,48 @@ Description
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+ch.fasta
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+FASTA file which contains all chimeric sequences.
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+denoised_acacia/
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Contains output of ACACIA (see ACACIA documentation) which are used for
+ app_make_results.pl.
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1246,191 +1523,113 @@ good.fasta
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+FASTA file which contains all non-chimeric sequences and input file for
+ ACACIA.
 \end_layout
 
 \end_inset
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+histograms.txt
 \end_layout
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
-
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
+Histogram of sequence lengths after processing with split_libraries.py.
 \end_layout
 
 \end_inset
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+qiime_mapping.txt
 \end_layout
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
-
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
+The mapping file QIIME uses for split_libraries.py, generated from the APP
+ config file.
 \end_layout
 
 \end_inset
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+seqs_filtered.qual
 \end_layout
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
-
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
+Quality file corresponding to seqs.fna.
 \end_layout
 
 \end_inset
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+seqs.fna
 \end_layout
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
-
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
+Output FASTA of split_libraries.py, and input for uchime/uclust.
 \end_layout
 
 \end_inset
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+split_library_log.txt
 \end_layout
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+Stats log of processing performed by split_libraries.py.
 \end_layout
 
 \end_inset
@@ -1443,8 +1642,20 @@ good.fasta
 
 \end_layout
 
-\begin_layout Minisec
-Details
+\begin_layout Chapter
+\start_of_appendix
+File Formats
+\end_layout
+
+\begin_layout Section
+APP Config File
+\begin_inset CommandInset label
+LatexCommand label
+name "sec:APP-Config-File"
+
+\end_inset
+
+
 \end_layout
 
 \end_body
