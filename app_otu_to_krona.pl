@@ -109,12 +109,14 @@ while(<$in>) {
         # deal with the greengenes or silva formatted tax string at the end of a line
         my @l = split(/;?\w_{1,2}|;/,$c[-1]);
         
-        # Add the OTU number on the end
+        # Add the OTU number on the end. This stops Krona from collapsing OTUs visually, which can lead to misinterpretation of results.
+        # Also, by putting an OTU number on the end, it is quicker to interrogate clades of interest arising from the krona back in the OTU table
         push @l, "otu".$c[0];
         
+        # Print the number of sequences detected and the phylogeny to
+        # the file which krona runs on.
         foreach my $i (1 .. $#c - 1) {
-            $tmp_files[$i-1]->print(
-                                    $c[$i],"\t",join("\t", @l), "\n");
+            $tmp_files[$i-1]->print($c[$i],"\t",join("\t", @l), "\n");
         }
     }
 }
