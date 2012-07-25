@@ -108,8 +108,13 @@ while(<$in>) {
     } else {
         # deal with the greengenes or silva formatted tax string at the end of a line
         my @l = split(/;?\w_{1,2}|;/,$c[-1]);
+        
+        # Add the OTU number on the end
+        push @l, "otu".$c[0];
+        
         foreach my $i (1 .. $#c - 1) {
-            $tmp_files[$i-1]->print($c[$i],"\t",join("\t", @l), "\n");
+            $tmp_files[$i-1]->print(
+                                    $c[$i],"\t",join("\t", @l), "\n");
         }
     }
 }
