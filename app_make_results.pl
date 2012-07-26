@@ -156,10 +156,15 @@ if($global_comp_DB_type eq "SILVA")
     $TAX_aligned_blast_file = $SILVA_TAX_aligned_blast_file;
     $imputed_file = $SILVA_imputed_file;
 } elsif ($global_comp_DB_type eq "MERGED") {
-    print "APP can only generate and normalise OTU tables using the merged database.\n";
+    print "Using the merged database, APP can only generate and normalise OTU tables.\n";
     print "Alpha and Beta diversities will need to be performed manually.\n";
     $TAX_tax_file = $MERGED_TAX_tax_file;
     $TAX_blast_file = $MERGED_TAX_blast_file;
+} elsif ($global_comp_DB_type eq 'GG') {
+    ;
+} else {
+    print STDERR "Invalid database defined '$global_comp_DB_type' !!!\n\n";
+    exit 1;
 }
 
 #### Check the user options and override if required
@@ -167,6 +172,11 @@ if($global_comp_DB_type eq "SILVA")
 $TAX_tax_file = overrideDefault($TAX_tax_file, "taxonomy");
 $TAX_blast_file = overrideDefault($TAX_blast_file, "blast");
 $imputed_file = overrideDefault($imputed_file, "imputed");
+
+print "Using taxonomy file: $TAX_tax_file\n";
+print "Using blast file: $TAX_blast_file\n";
+print "Using aligned blast file: $TAX_aligned_blast_file\n";
+print "Using imputed file: $QIIME_imputed_file\n";
 
 #### Sanity checks for the input files
 checkFileExists($TAX_tax_file);
@@ -945,7 +955,12 @@ sub parse_config_results
                 } elsif($fields[1] eq "MERGED")
                 {
                     $global_comp_DB_type = "MERGED";
-                } 
+                } elsif($fields[1] eq '0') {
+                    # this is just the default
+                } else {
+                    print STDERR "Invalid database defined '$fields[1]' !!!\n\n";
+                    exit 1;
+                }
             }
             elsif($fields[0] eq "NORMALISE")
             {
