@@ -116,7 +116,9 @@ while(<$in>) {
         # Print the number of sequences detected and the phylogeny to
         # the file which krona runs on.
         foreach my $i (1 .. $#c - 1) {
-            $tmp_files[$i-1]->print($c[$i],"\t",join("\t", @l), "\n");
+            if ($c[$i] != '0'){
+                $tmp_files[$i-1]->print($c[$i],"\t",join("\t", @l), "\n");
+            }
         }
     }
 }
@@ -126,12 +128,16 @@ foreach (@tmp_files) {
 close $in;
 
 if (! defined $global_options->{'temp'}) {
-    my $files = join (" ", @file_names);
-    `ktImportText -o $output_file_name $files`
+    my @input_arguments = ();
+    foreach my $i (0..$#sample_names){
+        $input_arguments[$i] = $file_names[$i].','.$sample_names[$i];
+    }
+    my $files = join (" ", @input_arguments);
+    `ImportText.pl -o $output_file_name $files`
 }
 
 if (! defined $global_options->{'keep'}) {
-    unlink @file_names;
+    #unlink @file_names;
 }
 
 exit;
@@ -167,7 +173,7 @@ sub printAtStart {
 print<<"EOF";
 ---------------------------------------------------------------- 
  $0
- Copyright (C) 2012 Connor Skennerton
+ Copyright (C) 2012 Connor Skennerton, Ben Woodcroft
     
  This program comes with ABSOLUTELY NO WARRANTY;
  This is free software, and you are welcome to redistribute it
