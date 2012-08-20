@@ -135,8 +135,6 @@ my $global_norm_num_reps = 1000;
 my $global_JN_file_count = 100;
 if($global_JN_file_count > $global_norm_num_reps) { $global_JN_file_count = $global_norm_num_reps - 1; }
 
-my $num_threads = 5;
-
 #### Override defaults from config or user
 if(exists $options->{'identity'}) { $global_similarity_setting = $options->{'identity'}; }
 if(exists $options->{'e'}) { $global_e_value = $options->{'e'}; }
@@ -467,14 +465,26 @@ if($global_norm_style eq "SEQ")
     # if we are doing OTU_AVERAGE (or if we've been asked to) then we need to assign taxonomy here
     print "Assigning taxonomy for SEQ normalised data set...\n";
     my $sn_rep_set_fasta = "$global_SB_processing_dir/".$sn_fasta_file."_rep_set.fasta";
-    checkAndRunCommand("assign_taxonomy.py", [{-i => $sn_rep_set_fasta,
-                                               -t => $TAX_tax_file,
-                                               -b => $TAX_blast_file,
-                                               -m => "blast",
-                                               -e => $global_e_value,
-                                               -o => $global_SB_processing_dir}], DIE_ON_FAILURE);
-
-    print "Making SEQ SEQ normalised otu table...\n";
+    print "Assign taxonomy method: $assign_taxonomy_method\n";
+        if ($assign_taxonomy_method eq 'blast') {
+            checkAndRunCommand("assign_taxonomy.py", [{-i => $sn_rep_set_fasta,
+                                                        -t => $TAX_tax_file,
+                                                        -b => $TAX_blast_file,
+                                                        -m => "blast",
+                                                        -a => $num_threads,
+                                                        -e => $global_e_value,
+                                                        -o => $global_SB_processing_dir}], DIE_ON_FAILURE);
+        } elsif ($assign_taxonomy_method eq 'bwasw') {
+            checkAndRunCommand("assign_taxonomy.py", [{-i => $sn_rep_set_fasta,
+                                                        -t => $TAX_tax_file,
+                                                        -d => $TAX_blast_file,
+                                                        -m => "bwasw",
+                                                        -a => $num_threads,
+                                                        -o => $global_SB_processing_dir}], DIE_ON_FAILURE);
+        } else {
+            die "Unrecognised assign_taxonomy method: '$assign_taxonomy_method'";
+        }
+    print "Making SEQ normalised otu table...\n";
     my $sn_rep_set_tax_assign = "$global_SB_processing_dir/".$sn_fasta_file."_rep_set_tax_assignments.txt";
     checkAndRunCommand("make_otu_table.py", [{-i => "$global_SB_processing_dir/uclust_picked_otus/$sn_otus_file",
                                               -t => $sn_rep_set_tax_assign,

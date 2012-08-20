@@ -457,7 +457,7 @@ sub getWorkingDirs
     $sn_prefix = "sequence_normalised";
     $sn_fasta_file = $sn_prefix.".fa";
     $sn_otu_table_file = "$global_SB_results_dir/$sn_prefix"."_otu_table.txt";
-    $sn_otu_table_file = "$global_SB_results_dir/$sn_prefix"."_otu_table_expanded.tsv";
+    $sn_expanded_otu_table_file = "$global_SB_results_dir/$sn_prefix"."_otu_table_expanded.tsv";
     $sn_otus_file = $sn_prefix."_otus.txt";
     $sn_tree_file = "$sn_prefix"."_tree.tre";    
 }
@@ -667,10 +667,10 @@ sub parseConfigQA
         last if($_ =~ /^@/);
         chomp $_;
         my @fields = split /\t/, $_;
-        if ($fields[0] =~ /_/) {
-            die "ERROR: Sample ID ". $fields[0] . " contains an underscore ".
-            "(_) and this can cause APP to fail (as QIIME replaces the underscore).\n" .
-            "Remove the underscore from the Sample ID in the config file and rerun
+        if ($fields[0] =~ /[_\-]/) {
+            die "ERROR: Sample ID ". $fields[0] . " contains an underscore or hyphen ".
+            "(_) and this can cause APP to fail (as QIIME replaces the offending character).\n" .
+            "Replace the underscore/hyphen (with a .) in the config file and rerun
             APP_do_QA.pl.\n\n";
         }
         # save the MID for later
