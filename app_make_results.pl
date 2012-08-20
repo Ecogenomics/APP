@@ -98,6 +98,8 @@ my $global_num_samples = 0;
 # we can compare sequences to the greengenes or the SILVA dbs
 my $global_comp_DB_type = "GG";
 
+my $assign_taxonomy_method = 'blast';
+
 # there are a number of different ways to normalise
 # by default don't normalise
 my $global_norm_style = "TABLE";
@@ -131,11 +133,15 @@ my $global_norm_num_reps = 1000;
 
 # we only need a subset of these guys to do jacknifing
 my $global_JN_file_count = 100;
-if($global_JN_file_count > $global_norm_num_reps) { $global_JN_file_count = $global_norm_num_reps - 1; } 
+if($global_JN_file_count > $global_norm_num_reps) { $global_JN_file_count = $global_norm_num_reps - 1; }
+
+my $num_threads = 5;
 
 #### Override defaults from config or user
 if(exists $options->{'identity'}) { $global_similarity_setting = $options->{'identity'}; }
 if(exists $options->{'e'}) { $global_e_value = $options->{'e'}; }
+if(exists $options->{'a'}) { $assign_taxonomy_method = $options->{'a'}; }
+if(exists $options->{'threads'}) { $num_threads = $options->{'threads'}; }
 
 print "Checking if all the config checks out...\t\t";
 parse_config_results();
@@ -153,10 +159,15 @@ if($global_comp_DB_type eq "SILVA")
     $TAX_aligned_blast_file = $SILVA_TAX_aligned_blast_file;
     $imputed_file = $SILVA_imputed_file;
 } elsif ($global_comp_DB_type eq "MERGED") {
-    print "APP can only generate and normalise OTU tables using the merged database.\n";
+    print "Using the merged database, APP can only generate and normalise OTU tables.\n";
     print "Alpha and Beta diversities will need to be performed manually.\n";
     $TAX_tax_file = $MERGED_TAX_tax_file;
     $TAX_blast_file = $MERGED_TAX_blast_file;
+} elsif ($global_comp_DB_type eq 'GG') {
+    ;
+} else {
+    print STDERR "Invalid database defined '$global_comp_DB_type' !!!\n\n";
+    exit 1;
 }
 
 #### Check the user options and override if required
@@ -165,11 +176,24 @@ $TAX_tax_file = overrideDefault($TAX_tax_file, "taxonomy");
 $TAX_blast_file = overrideDefault($TAX_blast_file, "blast");
 $imputed_file = overrideDefault($imputed_file, "imputed");
 
+print "Using taxonomy file: $TAX_tax_file\n";
+print "Using blast file: $TAX_blast_file\n";
+print "Using aligned blast file: $TAX_aligned_blast_file\n";
+print "Using imputed file: $QIIME_imputed_file\n";
+
 #### Sanity checks for the input files
 checkFileExists($TAX_tax_file);
-checkFileExists("$TAX_blast_file.nsq");
-checkFileExists("$TAX_blast_file.nin");
-checkFileExists("$TAX_blast_file.nhr");
+if ($assign_taxonomy_method eq 'blast'){
+    checkFileExists("$TAX_blast_file.nsq");
+    checkFileExists("$TAX_blast_file.nin");
+    checkFileExists("$TAX_blast_file.nhr");
+} elsif ($assign_taxonomy_method eq 'bwasw'){
+    my @extensions = ('amb','ann','bwt','pac','sa');
+    foreach $_ (@extensions)
+    {
+        checkFileExists($TAX_blast_file.'.'.$_);
+    }
+}
 
 #### Start the results pipeline!
 print "All good!\n";
@@ -202,17 +226,30 @@ checkAndRunCommand("pick_rep_set.py", [{-i => "$global_TB_processing_dir/uclust_
                                         -f => "$global_TB_processing_dir/$nn_fasta_file"}], DIE_ON_FAILURE);
                       
 
-# if we are doing OTU_AVERAGE (or if we've ben asked to) then we need to assign taxonomy here
+# if we are doing OTU_AVERAGE (or if we've been asked to) then we need to assign taxonomy here
 print "Assigning taxonomy for non normalised data set...\n";
 my $nn_rep_set_fasta = "$global_TB_processing_dir/".$nn_fasta_file."_rep_set.fasta";
 checkFileExists($nn_rep_set_fasta);
-checkAndRunCommand("assign_taxonomy.py", [{-i => $nn_rep_set_fasta,
-                                              -t => $TAX_tax_file,
-                                              -b => $TAX_blast_file,
-                                              -m => "blast",
-                                              -a => $num_threads,
-                                              -e => $global_e_value,
-                                              -o => $global_TB_processing_dir}], DIE_ON_FAILURE);
+
+print "Assign taxonomy method: $assign_taxonomy_method\n";
+if ($assign_taxonomy_method eq 'blast') {
+    checkAndRunCommand("assign_taxonomy.py", [{-i => $nn_rep_set_fasta,
+                                                -t => $TAX_tax_file,
+                                                -b => $TAX_blast_file,
+                                                -m => "blast",
+                                                -a => $num_threads,
+                                                -e => $global_e_value,
+                                                -o => $global_TB_processing_dir}], DIE_ON_FAILURE);
+} elsif ($assign_taxonomy_method eq 'bwasw') {
+    checkAndRunCommand("assign_taxonomy.py", [{-i => $nn_rep_set_fasta,
+                                                -t => $TAX_tax_file,
+                                                -d => $TAX_blast_file,
+                                                -m => "bwasw",
+                                                -a => $num_threads,
+                                                -o => $global_TB_processing_dir}], DIE_ON_FAILURE);
+} else {
+    die "Unrecognised assign_taxonomy method: '$assign_taxonomy_method'";
+}
 
 print "Making NON NORMALISED otu table...\n";
 my $nn_rep_set_tax_assign = "$global_TB_processing_dir/".$nn_fasta_file."_rep_set_tax_assignments.txt";
@@ -427,7 +464,7 @@ if($global_norm_style eq "SEQ")
     checkAndRunCommand("pick_rep_set.py", [{-i => "$global_SB_processing_dir/uclust_picked_otus/$sn_otus_file",
                                             -f => "$global_SB_processing_dir/$sn_fasta_file"}], DIE_ON_FAILURE);
 
-    # if we are doing OTU_AVERAGE (or if we've ben asked to) then we need to assign taxonomy here
+    # if we are doing OTU_AVERAGE (or if we've been asked to) then we need to assign taxonomy here
     print "Assigning taxonomy for SEQ normalised data set...\n";
     my $sn_rep_set_fasta = "$global_SB_processing_dir/".$sn_fasta_file."_rep_set.fasta";
     checkAndRunCommand("assign_taxonomy.py", [{-i => $sn_rep_set_fasta,
@@ -873,6 +910,7 @@ sub parse_config_results
     # parse the app config file and produce a qiime mappings file
     #
     open my $conf_fh, "<", $options->{'config'} or die $!;
+    print $global_mapping_file;
     open my $mapping, ">", $global_mapping_file or die $!;
     print $mapping "$FNB_HEADER\n";
     
@@ -922,7 +960,12 @@ sub parse_config_results
                 } elsif($fields[1] eq "MERGED")
                 {
                     $global_comp_DB_type = "MERGED";
-                } 
+                } elsif($fields[1] eq '0') {
+                    # this is just the default
+                } else {
+                    print STDERR "Invalid database defined '$fields[1]' !!!\n\n";
+                    exit 1;
+                }
             }
             elsif($fields[0] eq "NORMALISE")
             {
@@ -1064,7 +1107,8 @@ sub parse_config_results
 ######################################################################
 sub checkParams {
     my @standard_options = ( "help|h+", "config|c:s", "identity|i:i", "e:f",
-                             "b|blast:s", "t|taxonomy:s", "i|imputed:s");
+                             "b|blast:s", "t|taxonomy:s", "i|imputed:s",
+                             "a|assign-taxonomy-method:s",'threads:i');
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -1090,6 +1134,14 @@ sub checkParams {
         if(($options{'identity'} <= 0) || ($options{'identity'} > 1))
         {
             die "Identity must be an integer greater than 0 and no greater than 1\n";
+        }
+    }
+    my @taxonomy_asignment_methods = ('blast','bwasw');
+    if(exists $options{'assign-taxonomy-method'})
+    {
+        if(!(grep {$_ eq $options{'assign-taxonomy-method'}} @taxonomy_asignment_methods))
+        {
+            die "Taxonomy assignment method '$options{'assign-taxonomy-method'}' is not acceptable.";
         }
     }
     
@@ -1134,8 +1186,8 @@ __DATA__
 
 =head1 COPYRIGHT
 
-   copyright (C) 2011 Michael Imelfort and Paul Dennis, 2012 Connor Skennerton
-        and Adam Skarshewski.
+   copyright (C) 2011 Michael Imelfort and Paul Dennis, 2012 Connor Skennerton,
+        Adam Skarshewski and Ben Woodcroft.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -1159,11 +1211,13 @@ __DATA__
     app_make_results.pl -c|config CONFIG_FILE [-help|h]
 
       -c CONFIG_FILE               App config file to be processed
-      [-i identity VALUE]          Set blast identity [default: 97%]
-      [-e EVALUE]                  Set e-value for blast (assign taxonomy) [default 0.001]      
-      [-b FILE]                    Path to a custom blast database
+      [-i identity VALUE]          Set blast identity for OTU clustering (pick_otus.py) [default: 97%]
+      [-e EVALUE]                  Set e-value for blast (assign_taxonomy.py) [default 0.001]      
+      [-b FILE]                    Path to a custom blast database / bwa database
       [-t FILE]                    Path to a custom taxonomy for otus
       [-i FILE]                    Path to a custom imputed file
+      [-a FILE]                    assign_taxonomy method [default blast, alternative bwasw (for BWA)]
+      [--threads NUM_THREADS]      Use this many threads where possible [default 5]
       [-help -h]                   Displays basic usage information
          
 =cut
