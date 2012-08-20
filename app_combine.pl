@@ -323,6 +323,7 @@ sub printAtStart {
 print<<"EOF";
 ---------------------------------------------------------------- 
  $0
+ Version $VERSION
  Copyright (C) 2011 Michael Imelfort and Paul Dennis
     
  This program comes with ABSOLUTELY NO WARRANTY;

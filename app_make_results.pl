@@ -123,6 +123,9 @@ my $global_similarity_setting = 0.97;
 #defaults for assign taxonomy
 my $global_e_value = 0.001;
 
+# number of threads to us (currently this only affects assign taxonomy)
+my $num_threads = 5;
+
 # how many reps to do when normalising the OTU table
 my $global_norm_num_reps = 1000;
 
@@ -207,7 +210,7 @@ checkAndRunCommand("assign_taxonomy.py", [{-i => $nn_rep_set_fasta,
                                               -t => $TAX_tax_file,
                                               -b => $TAX_blast_file,
                                               -m => "blast",
-                                              -a => 5,
+                                              -a => $num_threads,
                                               -e => $global_e_value,
                                               -o => $global_TB_processing_dir}], DIE_ON_FAILURE);
 
@@ -220,9 +223,11 @@ checkAndRunCommand("make_otu_table.py",  [{-i => "$global_TB_processing_dir/uclu
                                            -o => $nn_otu_table_file}], DIE_ON_FAILURE);
 
 print "Making NON NORMALISED otu table (Extended format)...\n";
+
+
 checkAndRunCommand("reformat_otu_table.py",  [{-i => "$nn_otu_table_file",
                                                -t => $nn_rep_set_tax_assign,
-                                               -o => "$nn_otu_table_file.expanded"}], IGNORE_FAILURE);
+                                               -o => "$nn_expanded_otu_table_file"}], IGNORE_FAILURE);
 
 
 # do rarefaction for unnormalised data
@@ -256,7 +261,7 @@ copy("$global_TB_processing_dir/rare_tables/rarefaction_$global_norm_sample_size
 print "Reformatting normalised OTU table...\n";
 checkAndRunCommand("reformat_otu_table.py",  [{-i => "$tn_otu_table_file",
                                                -t => $nn_rep_set_tax_assign,
-                                               -o => "$tn_otu_table_file.expanded"}], IGNORE_FAILURE);
+                                               -o => "$tn_expanded_otu_table_file"}], IGNORE_FAILURE);
 
 # Merged database 
 if ($global_comp_DB_type eq "MERGED") {
@@ -440,7 +445,7 @@ if($global_norm_style eq "SEQ")
     
     checkAndRunCommand("reformat_otu_table.py",  [{-i => $sn_otu_table_file,
                                                    -t => $sn_rep_set_tax_assign,
-                                                   -o => "$sn_otu_table_file.expanded"}], IGNORE_FAILURE);
+                                                   -o => "$sn_expanded_otu_table_file"}], IGNORE_FAILURE);
 
     print "Summarizing by taxa.....\n";
     checkAndRunCommand("summarize_taxa.py", [{-i => $sn_otu_table_file,
@@ -870,7 +875,9 @@ sub parse_config_results
     open my $conf_fh, "<", $options->{'config'} or die $!;
     open my $mapping, ">", $global_mapping_file or die $!;
     print $mapping "$FNB_HEADER\n";
-
+    
+    my $full_rarefaction = 0;
+    
     while(<$conf_fh>)
     {
         next if($_ =~ /^#/);
@@ -1000,6 +1007,24 @@ sub parse_config_results
                     }
                 }
             }
+            elsif($fields[0] eq "NUM_THREADS")
+            {
+                if($fields[1] ne "")
+                { 
+                    my $user_num = int($fields[1]);
+                    if($user_num > 0)
+                    {
+                        $num_threads = $user_num;
+                    }
+                }
+            }
+            elsif($fields[0] eq "TRUNCATE_RAREFACTION_DEPTH")
+            {
+                if((uc($fields[1]) eq "FALSE") || ($fields[1] == 0))
+                {
+                    $full_rarefaction = 1;
+                }
+            }
         }
     }    
     close $conf_fh;
@@ -1012,6 +1037,26 @@ sub parse_config_results
         print "Finding normalisation size automatically\n";
         find_global_norm_sample_size();
     }
+    if (! $full_rarefaction) {
+        if ($global_rare_X > 20000) {
+            print "#####################################################\n" .
+                  "WARNING: A sample has more than 20000 reads, this\n".
+                  "can cause delays in calculating alpha diversity and\n" .
+                  "normalized OTU tables due to the number of OTU table\n" .
+                  "rarefactions that need to be calcuated.\n\n" .
+                  "APP will only calculate rarefactions to 20000 reads\n" .
+                  "and the normalisation table size will also be reduced\n" .
+                  "to this size (if necessary).\n\n" .
+                  "To overwrite this behaviour, add the following line\n" .
+                  "to the bottom of the app config file:\n\n" .
+                  "TRUNCATE_RAREFACTION_DEPTH=FALSE\n\n" .
+                  "#####################################################\n";
+            $global_rare_X = 20000;
+            if ($global_norm_sample_size > 20000) {
+                $global_norm_sample_size = 20000;
+            }
+        }
+    } 
 }
 
 ######################################################################
@@ -1058,6 +1103,7 @@ sub printAtStart {
 print<<"EOF";
 ---------------------------------------------------------------- 
  $0
+ Version $VERSION
  Copyright (C) 2011 Michael Imelfort and Paul Dennis
     
  This program comes with ABSOLUTELY NO WARRANTY;

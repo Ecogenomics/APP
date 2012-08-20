@@ -30,6 +30,7 @@ use Carp;
 
 our @ISA = qw(Exporter);
 our @EXPORT=qw(
+    $VERSION
     IGNORE_FAILURE
     WARN_ON_FAILURE
     DIE_ON_FAILURE
@@ -74,14 +75,17 @@ our @EXPORT=qw(
     $nn_fasta_file
     $nn_otus_file
     $nn_otu_table_file
+    $nn_expanded_otu_table_file
     $nn_tree_file
     $tn_prefix    
     $tn_otu_table_file
+    $tn_expanded_otu_table_file 
     $tn_tree_file
     $sn_prefix    
     $sn_fasta_file
     $sn_otus_file
     $sn_otu_table_file
+    $sn_expanded_otu_table_file 
     $sn_tree_file
     $global_mapping_file
     %acacia_config_hash
@@ -118,6 +122,9 @@ our @EXPORT=qw(
     updateAcaciaConfigHash
     returnAcaciaConfigString
     );
+
+# Version of this APP (update for each release candidate/tag)
+our $VERSION = '2.1.3';
 
 # Failure modes when executing a command
 use constant {
@@ -301,15 +308,18 @@ our $nn_prefix = "UNSET";
 our $nn_fasta_file = $nn_prefix."UNSET";
 our $nn_otus_file = $nn_prefix."UNSET";
 our $nn_otu_table_file = "UNSET";
+our $nn_expanded_otu_table_file = "UNSET";
 our $nn_tree_file = "UNSET";
 
 our $tn_prefix = "UNSET";
 our $tn_otu_table_file = "UNSET";
+our $tn_expanded_otu_table_file = "UNSET";
 our $tn_tree_file = "UNSET";
 
 our $sn_prefix = "UNSET";
 our $sn_fasta_file = $sn_prefix."UNSET";
 our $sn_otu_table_file = "UNSET";
+our $sn_expanded_otu_table_file = "UNSET";
 our $sn_otus_file = $sn_prefix."UNSET";
 our $sn_tree_file = "UNSET";
 
@@ -438,13 +448,16 @@ sub getWorkingDirs
     $nn_fasta_file = $nn_prefix.".fa";
     $nn_otus_file = $nn_prefix."_otus.txt";
     $nn_otu_table_file = "$global_TB_results_dir/$nn_prefix"."_otu_table.txt";
+    $nn_expanded_otu_table_file = "$global_TB_results_dir/$nn_prefix"."_otu_table_expanded.tsv";
     $nn_tree_file = $nn_prefix."_tree.tre";
     $tn_prefix = "table_normalised";
     $tn_otu_table_file = "$global_TB_results_dir/$tn_prefix"."_otu_table.txt";
+    $tn_expanded_otu_table_file = "$global_TB_results_dir/$tn_prefix"."_otu_table_expanded.tsv";
     $tn_tree_file = "$tn_prefix"."_tree.tre";
     $sn_prefix = "sequence_normalised";
     $sn_fasta_file = $sn_prefix.".fa";
     $sn_otu_table_file = "$global_SB_results_dir/$sn_prefix"."_otu_table.txt";
+    $sn_otu_table_file = "$global_SB_results_dir/$sn_prefix"."_otu_table_expanded.tsv";
     $sn_otus_file = $sn_prefix."_otus.txt";
     $sn_tree_file = "$sn_prefix"."_tree.tre";    
 }
@@ -660,7 +673,6 @@ sub parseConfigQA
             "Remove the underscore from the Sample ID in the config file and rerun
             APP_do_QA.pl.\n\n";
         }
-        use Data::Dumper;
         # save the MID for later
         $global_samp_ID_list{$fields[$FNA{'SampleID'}]} = $fields[$FNA{'USE'}];
         $global_raw_counts{$fields[$FNA{'SampleID'}]} = 0;
