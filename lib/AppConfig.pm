@@ -124,7 +124,7 @@ our @EXPORT=qw(
     );
 
 # Version of this APP (update for each release candidate/tag)
-our $VERSION = '2.1.3';
+our $VERSION = '2.3.0';
 
 # Failure modes when executing a command
 use constant {
@@ -525,10 +525,13 @@ sub removeChimeras
     # Remove chimeras using uclust
     #
     print "Removing chimeras...\n";
-    checkAndRunCommand("usearch", [{'--uchime' => "seqs.fna",
-                                               '--db' => $QIIME_TAX_blast_file,
-                                               '--nonchimeras' => $CHIME_good_file,
-                                               '--chimeras' => $CHIME_bad_file}], DIE_ON_FAILURE);
+        
+    checkAndRunCommand("usearch", [{'-uchime_ref' => 'seqs.fna'},
+                                   {'-db' => $QIIME_TAX_blast_file,
+                                    '-strand' => 'both',
+                                    '-threads' => 10,
+                                    '-nonchimeras' => $CHIME_good_file,
+                                    '-chimeras' => $CHIME_bad_file}], DIE_ON_FAILURE);
 }
 
 sub denoise
@@ -555,7 +558,7 @@ sub denoise
     # zero), we need to ignore on failure and test if the stats file was written
     # to
     my $params_array = [["-XX:+UseConcMarkSweepGC",
-                         "-Xmx10G"],
+                         "-Xmx20G"],
                          {-jar => '$ACACIA'},
                          {-c => $config_filename}];
     
