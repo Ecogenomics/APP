@@ -1100,7 +1100,7 @@ sub parse_config_results
                   "APP will only calculate rarefactions to 20000 reads\n" .
                   "and the normalisation table size will also be reduced\n" .
                   "to this size (if necessary).\n\n" .
-                  "To overwrite this behaviour, add the following line\n" .
+                  "To turn off this behaviour, add the following line\n" .
                   "to the bottom of the app config file:\n\n" .
                   "TRUNCATE_RAREFACTION_DEPTH=FALSE\n\n" .
                   "#####################################################\n";

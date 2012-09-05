@@ -40,6 +40,7 @@ use Getopt::Long;
 
 #locally-written modules
 use AppPrimers;
+use AppConfig;
 
 BEGIN {
     select(STDERR);
