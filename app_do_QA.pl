@@ -149,7 +149,8 @@ print<<"EOF";
 ---------------------------------------------------------------- 
  $0
  Version $VERSION
- Copyright (C) 2011 Michael Imelfort and Paul Dennis
+ Copyright (C) 2011 Michael Imelfort and Paul Dennis, 2012
+ Adam Skarshewski
     
  This program comes with ABSOLUTELY NO WARRANTY;
  This is free software, and you are welcome to redistribute it

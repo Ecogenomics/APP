@@ -124,7 +124,7 @@ our @EXPORT=qw(
     );
 
 # Version of this APP (update for each release candidate/tag)
-our $VERSION = '2.3.1';
+our $VERSION = '2.3.2';
 
 # Failure modes when executing a command
 use constant {
@@ -556,9 +556,9 @@ sub denoise
     
     # Because acacia's return value is 1 on success (instead of the traditional
     # zero), we need to ignore on failure and test if the stats file was written
-    # to
+    # to.
     my $params_array = [["-XX:+UseConcMarkSweepGC",
-                         "-Xmx20G"],
+                         "-Xmx100G"],
                          {-jar => '$ACACIA'},
                          {-c => $config_filename}];
     
@@ -569,8 +569,13 @@ sub denoise
     
     # If the stats file doesn't exist or is zero size, die and raise an error.
     if ((! -e $stats_file) || (-z $stats_file)) {
-        my $cmd = formatParams($params_array);    
-        handleCommandFailure($cmd, DIE_ON_FAILURE);
+        print "\n################# WARNING!!!!!!!!!! #################\n" .
+              "The ACACIA stats file was not written to!!!\n" .
+              "You should check the acacia_standard_error.txt and\n" .
+              "acacia_standard_debug.txt in the QA/denoised_acacia/\n" .
+              "directory before proceeding to app_make_results.pl to\n" .
+              "ensure ACACIA completed successfully.\n" .
+              "#####################################################\n\n"   
     }
     #`java -XX:+UseConcMarkSweepGC -Xmx10G -jar \$ACACIA -c $config_filename`;
     #`sed -i -e "s/all_tags_[^ ]* //" $global_acacia_output_dir/$ACACIA_out_file`;

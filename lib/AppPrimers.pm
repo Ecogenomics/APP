@@ -41,5 +41,6 @@ $APP_prim_len_hash{'pyroLSSU1114F-3'} = 379;
 $APP_prim_len_hash{'pyroL_ITS1-F'} = 425;
 $APP_prim_len_hash{'pyroLfimH72F'} = 640;
 $APP_prim_len_hash{'pyroLfimH563R'} = 640;
+$APP_prim_len_hash{'ppk_pyro_968'} = 470;
 
 1;
