@@ -131,6 +131,9 @@ my $num_threads = 5;
 # how many reps to do when normalising the OTU table
 my $global_norm_num_reps = 1000;
 
+# Should we only go to OTU table normalisation?
+my $otu_table_generation_only = 0;
+
 # we only need a subset of these guys to do jacknifing
 my $global_JN_file_count = 100;
 if($global_JN_file_count > $global_norm_num_reps) { $global_JN_file_count = $global_norm_num_reps - 1; }
@@ -304,7 +307,11 @@ if ($global_comp_DB_type eq "MERGED") {
     print "Stopping here.\n";
     exit(0);   
 }
-
+if ($otu_table_generation_only) {
+    print "APP was configured to only perform otu table generation.\n";
+    print "Stopping here.\n";
+    exit(0);   
+}
 
 print "Summarizing by taxa.....\n";
 
@@ -1076,6 +1083,13 @@ sub parse_config_results
                 if((uc($fields[1]) eq "FALSE") || ($fields[1] == 0))
                 {
                     $full_rarefaction = 1;
+                }
+            }
+            elsif($fields[0] eq "OTU_TABLES_ONLY")
+            {
+                if((uc($fields[1]) eq "TRUE") || ($fields[1] == 1))
+                {
+                    $otu_table_generation_only = 1;
                 }
             }
         }
