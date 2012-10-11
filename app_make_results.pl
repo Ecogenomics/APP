@@ -395,42 +395,45 @@ foreach my $phylogeny_dir (@phylogeny_dirs) {
                                                           "--resolution" => 300,
                                                           "--imagetype" => $format}], DIE_ON_FAILURE);
     }
+    if ($global_num_samples < 2) {
+        print "Less than 2 samples, skipping beta diversity...\n";
+    } else {
+        print "Jacknifed beta diversity....\n";
+        jack_knifing("weighted_unifrac", $nn_otu_table_file, "$phylogeny_proc_dir/$nn_tree_file", $jack_knife_folder, $phylogeny_results_dir);
+        jack_knifing("unweighted_unifrac", $nn_otu_table_file, "$phylogeny_proc_dir/$nn_tree_file", $jack_knife_folder, $phylogeny_results_dir);
+        jack_knifing("euclidean", $nn_otu_table_file, "$phylogeny_proc_dir/$nn_tree_file", $jack_knife_folder, $phylogeny_results_dir);
+        jack_knifing("hellinger", $nn_otu_table_file, "$phylogeny_proc_dir/$nn_tree_file", $jack_knife_folder, $phylogeny_results_dir);
     
-    print "Jacknifed beta diversity....\n";
-    jack_knifing("weighted_unifrac", $nn_otu_table_file, "$phylogeny_proc_dir/$nn_tree_file", $jack_knife_folder, $phylogeny_results_dir);
-    jack_knifing("unweighted_unifrac", $nn_otu_table_file, "$phylogeny_proc_dir/$nn_tree_file", $jack_knife_folder, $phylogeny_results_dir);
-    jack_knifing("euclidean", $nn_otu_table_file, "$phylogeny_proc_dir/$nn_tree_file", $jack_knife_folder, $phylogeny_results_dir);
-    jack_knifing("hellinger", $nn_otu_table_file, "$phylogeny_proc_dir/$nn_tree_file", $jack_knife_folder, $phylogeny_results_dir);
-
-
-    # beta for the normalised table
-    my @beta_methods = ('weighted_unifrac','unweighted_unifrac','euclidean','hellinger','binary_euclidean','chord');
-    foreach my $matrix_type (@beta_methods)
-    {    
-        my $params = [{-i => "$tn_otu_table_file",
-                       -o => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type",
-                       -m => $matrix_type}];
+    
+        # beta for the normalised table
+        my @beta_methods = ('weighted_unifrac','unweighted_unifrac','euclidean','hellinger','binary_euclidean','chord');
+        foreach my $matrix_type (@beta_methods)
+        {    
+            my $params = [{-i => "$tn_otu_table_file",
+                           -o => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type",
+                           -m => $matrix_type}];
+            
+            # qiime spews when you give it a tree for some methods 
+            if(!($matrix_type =~ /euclid/))
+            {
+                push @{$params}, {-t => "$phylogeny_proc_dir/$nn_tree_file"};
+            }
+            
+            checkAndRunCommand("beta_diversity.py", $params, DIE_ON_FAILURE);
         
-        # qiime spews when you give it a tree for some methods 
-        if(!($matrix_type =~ /euclid/))
-        {
-            push @{$params}, {-t => "$phylogeny_proc_dir/$nn_tree_file"};
+            
+            my $beta_file = $matrix_type."_".$tn_prefix."_otu_table.txt";
+            my $upgma_file = $matrix_type."_".$tn_prefix."_otu_table_upgma.tre";
+            my $pcoa_file = $matrix_type."_".$tn_prefix."_pcoa.txt";
+        
+            # Perform UPGMA clustering on rarefied distance matrices 
+            checkAndRunCommand("upgma_cluster.py", [{-i => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type/$beta_file",
+                                                        -o => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type/$upgma_file"}], DIE_ON_FAILURE);    
+            
+            # Compute principal coordinates
+            checkAndRunCommand("principal_coordinates.py", [{-i => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type/$beta_file",
+                                                                -o => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type/$pcoa_file"}], DIE_ON_FAILURE);
         }
-        
-        checkAndRunCommand("beta_diversity.py", $params, DIE_ON_FAILURE);
-    
-        
-        my $beta_file = $matrix_type."_".$tn_prefix."_otu_table.txt";
-        my $upgma_file = $matrix_type."_".$tn_prefix."_otu_table_upgma.tre";
-        my $pcoa_file = $matrix_type."_".$tn_prefix."_pcoa.txt";
-    
-        # Perform UPGMA clustering on rarefied distance matrices 
-        checkAndRunCommand("upgma_cluster.py", [{-i => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type/$beta_file",
-                                                    -o => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type/$upgma_file"}], DIE_ON_FAILURE);    
-        
-        # Compute principal coordinates
-        checkAndRunCommand("principal_coordinates.py", [{-i => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type/$beta_file",
-                                                            -o => "$phylogeny_results_dir/beta_diversity/$tn_prefix/$matrix_type/$pcoa_file"}], DIE_ON_FAILURE);
     }
 }
 
@@ -559,34 +562,37 @@ if($global_norm_style eq "SEQ")
                                                               shannon
                                                               fisher_alpha))}], DIE_ON_FAILURE);
         #beta
-        my @beta_methods = ('weighted_unifrac','unweighted_unifrac','euclidean','hellinger','binary_euclidean','chord');
-        foreach my $matrix_type (@beta_methods)
-        {
-            my $params = {-i => $sn_otu_table_file,
-                          -o => "$phylogeny_results_dir/beta_diversity/$matrix_type",
-                          -m => $matrix_type};
-        
-            # qiime spews when you give it a tree for some methods 
-            if(!($matrix_type =~ /euclid/))
+        if ($global_num_samples < 2) {
+            print "Less than 2 samples, skipping beta diversity...\n";
+        } else {
+            my @beta_methods = ('weighted_unifrac','unweighted_unifrac','euclidean','hellinger','binary_euclidean','chord');
+            foreach my $matrix_type (@beta_methods)
             {
-                $params->{"-t"} = "$phylogeny_proc_dir/$sn_tree_file";
+                my $params = {-i => $sn_otu_table_file,
+                              -o => "$phylogeny_results_dir/beta_diversity/$matrix_type",
+                              -m => $matrix_type};
+            
+                # qiime spews when you give it a tree for some methods 
+                if(!($matrix_type =~ /euclid/))
+                {
+                    $params->{"-t"} = "$phylogeny_proc_dir/$sn_tree_file";
+                }
+                
+                checkAndRunCommand("beta_diversity.py", [$params], DIE_ON_FAILURE);
+                
+                my $beta_file = $matrix_type."_".$sn_prefix."_otu_table.txt";
+                my $upgma_file = $matrix_type."_".$sn_prefix."_otu_table_upgma.tre";
+                my $pcoa_file = $matrix_type."_".$sn_prefix."_pcoa.txt";
+                
+                # Perform UPGMA clustering on rarefied distance matrices 
+                checkAndRunCommand("upgma_cluster.py", [{-i => "$phylogeny_results_dir/beta_diversity/$matrix_type/$beta_file",
+                                                         -o => "$phylogeny_results_dir/beta_diversity/$matrix_type/$upgma_file"}], DIE_ON_FAILURE);
+        
+                # Compute principal coordinates
+                checkAndRunCommand("principal_coordinates.py", [{-i => "$phylogeny_results_dir/beta_diversity/$matrix_type/$beta_file",
+                                                                 -o => "$phylogeny_results_dir/beta_diversity/$matrix_type/$pcoa_file"}], DIE_ON_FAILURE);
             }
-            
-            checkAndRunCommand("beta_diversity.py", [$params], DIE_ON_FAILURE);
-            
-            my $beta_file = $matrix_type."_".$sn_prefix."_otu_table.txt";
-            my $upgma_file = $matrix_type."_".$sn_prefix."_otu_table_upgma.tre";
-            my $pcoa_file = $matrix_type."_".$sn_prefix."_pcoa.txt";
-            
-            # Perform UPGMA clustering on rarefied distance matrices 
-            checkAndRunCommand("upgma_cluster.py", [{-i => "$phylogeny_results_dir/beta_diversity/$matrix_type/$beta_file",
-                                                     -o => "$phylogeny_results_dir/beta_diversity/$matrix_type/$upgma_file"}], DIE_ON_FAILURE);
-    
-            # Compute principal coordinates
-            checkAndRunCommand("principal_coordinates.py", [{-i => "$phylogeny_results_dir/beta_diversity/$matrix_type/$beta_file",
-                                                             -o => "$phylogeny_results_dir/beta_diversity/$matrix_type/$pcoa_file"}], DIE_ON_FAILURE);
         }
-
     }
 }
     
