@@ -538,6 +538,11 @@ sub removeChimeras
     #-----
     # Remove chimeras using uclust
     #
+    if (-z 'seqs.fna') {
+        croak "ERROR: No sequences in seqs.fna (no sequences successfully demultiplexed after split_libraries.py).\n" .
+        "Check the config file that the barcode/primer sequences are correct.\n"
+    }
+    
     print "Removing chimeras...\n";
         
     checkAndRunCommand("usearch", [{'-uchime_ref' => 'seqs.fna'},
