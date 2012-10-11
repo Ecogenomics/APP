@@ -133,7 +133,7 @@ if (! defined $global_options->{'temp'}) {
         $input_arguments[$i] = $file_names[$i].','.$sample_names[$i];
     }
     my $files = join (" ", @input_arguments);
-    `ImportText.pl -o $output_file_name $files`
+    `ktImportText -o $output_file_name $files`
 }
 
 if (! defined $global_options->{'keep'}) {
