@@ -505,8 +505,22 @@ sub splitLibraries
     #
     my ($job_ID, $params) = @_;
     print "Splitting libraries...\n";
+    my @fasta_files;
+    foreach my $suffix ((".fa", ".fna", ".fasta")) {
+        if (-e "../$job_ID$suffix") {
+            push @fasta_files, "$job_ID$suffix";
+        }
+    }
+    if (scalar @fasta_files) {
+        if (scalar @fasta_files > 1) {
+            croak "ERROR: Too many possible FASTA files to choose, remove or rename " .
+            "to remove ambiguity. Offending files: " . join(", ", @fasta_files) . "\n";
+        }
+    } else {
+        croak "ERROR: Unable to find fasta file for app_do_QA.pl: $job_ID.fna\n";
+    }
     my $default_params = {-m => $QIIME_map_file,
-                          -f => "../$job_ID.fna",
+                          -f => "../" . $fasta_files[0],
                           -q => "../$job_ID.qual",
                           -b => $global_barcode_length,
                           -a => 2,
