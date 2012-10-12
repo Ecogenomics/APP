@@ -1136,9 +1136,9 @@ sub parse_config_results
 # TEMPLATE SUBS
 ######################################################################
 sub checkParams {
-    my @standard_options = ( "help|h+", "config|c:s", "identity|i:i", "e:f",
-                             "b|blast:s", "t|taxonomy:s", "i|imputed:s",
-                             "a|assign-taxonomy-method:s",'threads:i');
+    my @standard_options = ( "help|h+", "config|c:s", "identity|i:i", "evalue|e:f",
+                             "blast|b:s", "taxonomy|t:s", "imputed|I:s",
+                             "assign-taxonomy-method|a:s",'threads|n:i');
     my %options;
 
     # Add any other command line options, and the code to handle them
@@ -1245,9 +1245,9 @@ __DATA__
       [-e EVALUE]                  Set e-value for blast (assign_taxonomy.py) [default 0.001]      
       [-b FILE]                    Path to a custom blast database / bwa database
       [-t FILE]                    Path to a custom taxonomy for otus
-      [-i FILE]                    Path to a custom imputed file
+      [-I FILE]                    Path to a custom imputed file
       [-a FILE]                    assign_taxonomy method [default blast, alternative bwasw (for BWA)]
-      [--threads NUM_THREADS]      Use this many threads where possible [default 5]
+      [-n NUM_THREADS]             Use this many threads where possible [default 5]
       [-help -h]                   Displays basic usage information
          
 =cut
