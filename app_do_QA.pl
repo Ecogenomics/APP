@@ -57,9 +57,11 @@ if (defined($options->{'acacia_conf'})) {
     updateAcaciaConfigHash($options->{'acacia_conf'})
 }
 
-if (defined($options->{'length'})) {
-    $acacia_config_hash{TRIM_TO_LENGTH} = $options->{'length'};
+if (! defined($options->{'length'})) {
+    $options->{'length'} = $default_trim_length; 
 }
+$acacia_config_hash{TRIM_TO_LENGTH} = $options->{'length'};
+$acacia_config_hash{FILTER_N_BEFORE_POS} = $options->{'length'};
 
 
 # get the Job_ID we're working on
@@ -90,6 +92,7 @@ if ($QA_params->{ION_TORRENT}) {
     $split_library_params = {-l => 150,
                              -s => 15};
     $acacia_config_hash{TRIM_TO_LENGTH} = 150;
+    $acacia_config_hash{FILTER_N_BEFORE_POS} = 150;
 }
 
 #if ($QA_params->{ACACIA_TRIM_TO_LENGTH}) {    
@@ -138,7 +141,6 @@ sub checkParams {
 
     # Compulsosy items
     if(!exists $options{'config'} ) { print "**ERROR: you MUST give a config file\n"; exec("pod2usage $0"); }
-    if(!exists $options{'length'} ) { print "**ERROR: you MUST supply a length to trim reads to\n"; exec("pod2usage $0"); }
     #if(!exists $options{''} ) { print "**ERROR: \n"; exec("pod2usage $0"); }
 
     return \%options;
@@ -191,7 +193,7 @@ __DATA__
     app_do_QA.pl -c|config CONFIG_FILE -l|length TRIM_LENGTH [-help|h]
 
       -c CONFIG_FILE               app config file to be processed
-      -l TRIM_LENGTH               Trim all reads to this length (bp).
+      [-l TRIM_LENGTH]             Trim all reads to this length (default: 250bp).
       [-acacia_conf CONFIG_FILE]   alternate acacia config file (Full path!)
       [-help -h]                   Displays basic usage information
          

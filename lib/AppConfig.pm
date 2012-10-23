@@ -49,7 +49,8 @@ our @EXPORT=qw(
     %global_raw_counts 
     %global_chimer_counts 
     %global_acacia_counts 
-    $global_acacia_config 
+    $global_acacia_config
+    $default_trim_length
     $global_barcode_length 
     $QA_dir
     $proc_dir 
@@ -219,7 +220,7 @@ our %acacia_config_hash = (
      FASTA_LOCATION => "good.fasta",
      FASTQ => "FALSE",
      FASTQ_LOCATION => "null",
-     FILTER_N_BEFORE_POS => 350,
+     FILTER_N_BEFORE_POS => 250,
      FLOW_KEY => "TCAG",
      MAXIMUM_MANHATTAN_DISTANCE => 13,
      MAX_RECURSE_DEPTH => 2,
@@ -234,9 +235,14 @@ our %acacia_config_hash = (
      REPRESENTATIVE_SEQUENCE => "Mode",
      SIGNIFICANCE_LEVEL => -9,
      SPLIT_ON_MID => "FALSE",
-     TRIM_TO_LENGTH => 230,
+     TRIM_TO_LENGTH => 250,
      TRUNCATE_READ_TO_FLOW => ""
 );
+
+#
+# The is the default trim length during QA.
+#
+our $default_trim_length = 250;
 
 our $global_barcode_length = "variable_length";
 
@@ -527,6 +533,9 @@ sub splitLibraries
                           -H => 10,
                           -M => 1,
                           -d => ''};
+                          #-s => 20,
+                          #-l => 350,
+                          #-w => 10};
     foreach my $key (keys %{$params}) {
         $default_params->{$key} = $params->{$key}
     }
