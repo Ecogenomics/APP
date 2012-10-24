@@ -125,7 +125,7 @@ our @EXPORT=qw(
     );
 
 # Version of this APP (update for each release candidate/tag)
-our $VERSION = '2.3.4';
+our $VERSION = '2.3.5';
 
 # Failure modes when executing a command
 use constant {
