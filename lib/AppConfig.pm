@@ -534,7 +534,7 @@ sub splitLibraries
                           -M => 1,
                           -d => ''};
                           #-s => 20,
-                          #-l => 350,
+                          #-l => 250,
                           #-w => 10};
     foreach my $key (keys %{$params}) {
         $default_params->{$key} = $params->{$key}
@@ -631,22 +631,21 @@ sub getReadCounts
         next if(!($_ =~ /^>/));
         my @f1 = split /_/, $_;
         my @f2 = split />/, $f1[0];
-        my $fl =$f2[1];
+        my $fl = $f2[1];
         foreach my $uid (keys %global_samp_ID_list)
         {
             # QIIME replaces _ with . in Sample IDs, need to make the correction
             # here or keys in the hash won't be found in the output sequence
             # file.
             my $qiimeified_uid = qiimeify_uid($uid);
-            if($fl =~ /^$qiimeified_uid/)
+            if($fl =~ /^$qiimeified_uid$/)
             {
                 # this guy begins with the exact MID
                 $global_raw_counts{$uid}++;
-                next;
+                last;
             }
         }
     }
-    
     open $tmp_fh, "<", $CHIME_good_file or die $!;
     while(<$tmp_fh>)
     {
@@ -657,11 +656,11 @@ sub getReadCounts
         foreach my $uid (keys %global_samp_ID_list)
         {
             my $qiimeified_uid = qiimeify_uid($uid);
-            if($fl =~ /^$qiimeified_uid/)
+            if($fl =~ /^$qiimeified_uid$/)
             {
                 # this guy begins with the exact MID
                 $global_chimer_counts{$uid}++;
-                next;
+                last;
             }
         }
     }    
@@ -676,11 +675,11 @@ sub getReadCounts
         foreach my $uid (keys %global_samp_ID_list)
         {
             my $qiimeified_uid = qiimeify_uid($uid);
-            if($fl =~ /^$qiimeified_uid/)
+            if($fl =~ /^$qiimeified_uid$/)
             {
                 # this guy begins with the exact MID
                 $global_acacia_counts{$uid}++;
-                next;
+                last;
             }
         }
     }
