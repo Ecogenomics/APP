@@ -125,7 +125,7 @@ our @EXPORT=qw(
     );
 
 # Version of this APP (update for each release candidate/tag)
-our $VERSION = '2.3.5';
+our $VERSION = '2.3.6';
 
 # Failure modes when executing a command
 use constant {
@@ -638,7 +638,7 @@ sub getReadCounts
             # here or keys in the hash won't be found in the output sequence
             # file.
             my $qiimeified_uid = qiimeify_uid($uid);
-            if($fl =~ /^$qiimeified_uid$/)
+            if($fl eq $qiimeified_uid)
             {
                 # this guy begins with the exact MID
                 $global_raw_counts{$uid}++;
@@ -656,7 +656,7 @@ sub getReadCounts
         foreach my $uid (keys %global_samp_ID_list)
         {
             my $qiimeified_uid = qiimeify_uid($uid);
-            if($fl =~ /^$qiimeified_uid$/)
+            if($fl eq $qiimeified_uid)
             {
                 # this guy begins with the exact MID
                 $global_chimer_counts{$uid}++;
@@ -675,7 +675,7 @@ sub getReadCounts
         foreach my $uid (keys %global_samp_ID_list)
         {
             my $qiimeified_uid = qiimeify_uid($uid);
-            if($fl =~ /^$qiimeified_uid$/)
+            if($fl eq $qiimeified_uid)
             {
                 # this guy begins with the exact MID
                 $global_acacia_counts{$uid}++;
