@@ -114,7 +114,8 @@ our @EXPORT=qw(
     makeOutputDirs 
     makeResultsDirs
     makeImageDirs
-    splitLibraries 
+    splitLibraries
+    truncateFastaAndQual
     removeChimeras 
     denoise 
     getReadCounts 
@@ -125,7 +126,7 @@ our @EXPORT=qw(
     );
 
 # Version of this APP (update for each release candidate/tag)
-our $VERSION = '2.3.6';
+our $VERSION = '2.4.0';
 
 # Failure modes when executing a command
 use constant {
@@ -199,7 +200,7 @@ our $APP_BYRUN = $APP_ROOT."/by_run";
 #
 # We make a number of directories during the process. Store their names here
 #
-our $QA_dir = "QA";
+our $QA_dir = "QA_CD_HIT_OTU";
 our $proc_dir = "processing";
 our $res_dir = "results";
 our $image_dir = "images";
@@ -416,16 +417,19 @@ sub handleCommandFailure {
     }
 }
 
-
 sub getWorkingDirs
 {
     #-----
     # Set a number of output directories
     #
-    my ($base_directory, $results_output_dir) = @_;
+    my ($base_directory, $results_output_dir, $analysis_type) = @_;
     
     # get the acacia denoised directory
     $global_acacia_output_dir = $acacia_config_hash{'OUTPUT_DIR'};
+    
+    if ($analysis_type eq "QIIME") {
+        $QA_dir = "QA_QIIME"
+    }
 
     # Get the working dir
     # working dir is the dir of the config file
@@ -528,18 +532,27 @@ sub splitLibraries
     my $default_params = {-m => $QIIME_map_file,
                           -f => "../" . $fasta_files[0],
                           -q => "../$job_ID.qual",
-                          -b => $global_barcode_length,
-                          -a => 2,
-                          -H => 10,
-                          -M => 1,
-                          -d => ''};
-                          #-s => 20,
-                          #-l => 250,
-                          #-w => 10};
+                          -b => $global_barcode_length};
     foreach my $key (keys %{$params}) {
         $default_params->{$key} = $params->{$key}
     }
     checkAndRunCommand("split_libraries.py", [$default_params], DIE_ON_FAILURE);
+}
+
+
+sub truncateFastaAndQual
+{
+    #-----
+    # Wrapper for Qiime split libraries
+    #
+    if (-z 'seqs.fna') {
+        croak "ERROR: No sequences in seqs.fna (no sequences successfully demultiplexed after split_libraries.py).\n" .
+        "Check the config file that the barcode/primer sequences are correct.\n"
+    }
+    print "Trimming reads...\n";
+    checkAndRunCommand("truncate_fasta_qual_files.py", [{-f => 'seqs.fna',
+                                                         -q => 'seqs_filtered.qual',
+                                                         -b => $default_trim_length}], DIE_ON_FAILURE);
 }
 
 sub removeChimeras
@@ -625,6 +638,7 @@ sub getReadCounts
     # $CHIME_good_file
     # $global_acacia_output_dir/$ACACIA_out_file
     #
+    my $raw_only = shift;
     open my $tmp_fh, "<", $QIIME_split_out or die $!;
     while(<$tmp_fh>)
     {
@@ -642,9 +656,16 @@ sub getReadCounts
             {
                 # this guy begins with the exact MID
                 $global_raw_counts{$uid}++;
+                if ($raw_only) {
+                    $global_chimer_counts{$uid}++;
+                    $global_acacia_counts{$uid}++;
+                }
                 last;
             }
         }
+    }
+    if ($raw_only) {
+        return;
     }
     open $tmp_fh, "<", $CHIME_good_file or die $!;
     while(<$tmp_fh>)
@@ -692,7 +713,7 @@ sub parseConfigQA
     #
     my ($config_prefix, $return_params_hash) = @_;
     open my $conf_fh, "<", $config_prefix or die $!;
-    open my $mapping, ">", $global_mapping_file or die $!;
+    open my $mapping, ">", "qiime_mapping.txt" or die $!;
     print $mapping "$FNB_HEADER\n";
     my $used_sample_count = 0;
     # Parse the sample information.

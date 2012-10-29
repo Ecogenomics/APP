@@ -53,17 +53,6 @@ my $options = checkParams();
 # CODE HERE
 ######################################################################
 
-if (defined($options->{'acacia_conf'})) {
-    updateAcaciaConfigHash($options->{'acacia_conf'})
-}
-
-if (! defined($options->{'length'})) {
-    $options->{'length'} = $default_trim_length; 
-}
-$acacia_config_hash{TRIM_TO_LENGTH} = $options->{'length'};
-$acacia_config_hash{FILTER_N_BEFORE_POS} = $options->{'length'};
-
-
 # get the Job_ID we're working on
 my $job_ID = basename($options->{'config'});
 if ($job_ID =~ /app_(.*).config$/) {
@@ -73,12 +62,6 @@ if ($job_ID =~ /app_(.*).config$/) {
         "where <prefix> can be chosen by the user.\n" ;
 }
 
-# get the working directories
-getWorkingDirs($options->{'config'});
-
-# make the output directories
-makeOutputDirs("");
-
 my $QA_params = {};
 # parse the config file
 if (! parseConfigQA($options->{'config'}, $QA_params)) {
@@ -86,33 +69,75 @@ if (! parseConfigQA($options->{'config'}, $QA_params)) {
         "config file\n";    
 };
 
+my $OTU_gen_method = 'CD_HIT_OTU';
+if (defined($QA_params->{OTU_GENERATION_METHOD}) && uc($QA_params->{OTU_GENERATION_METHOD}) eq "QIIME") {
+    getWorkingDirs($options->{'config'}, "UNSET", "QIIME");
+    $OTU_gen_method = 'QIIME'; 
+} 
+# get the working directories
+getWorkingDirs($options->{'config'}, "UNSET", $OTU_gen_method);   
 
-my $split_library_params;
-if ($QA_params->{ION_TORRENT}) {    
-    $split_library_params = {-l => 150,
-                             -s => 15};
-    $acacia_config_hash{TRIM_TO_LENGTH} = 150;
-    $acacia_config_hash{FILTER_N_BEFORE_POS} = 150;
+# make the output directories
+makeOutputDirs("");
+
+`mv qiime_mapping.txt $global_mapping_file`;
+
+if (defined($options->{'acacia_conf'})) {
+    updateAcaciaConfigHash($options->{'acacia_conf'})
 }
 
-#if ($QA_params->{ACACIA_TRIM_TO_LENGTH}) {    
-#    $acacia_config_hash{TRIM_TO_LENGTH} = $QA_params->{ACACIA_TRIM_TO_LENGTH};
-#}
+if (! defined($options->{'length'})) {
+    $options->{'length'} = $default_trim_length;
+}
 
-print "All good!\n";
-
-#### start the $QA_dir pipeline!
 chdir "$global_working_dir/$QA_dir";
-splitLibraries($job_ID, $split_library_params);
-removeChimeras();
-denoise();
+if ($OTU_gen_method eq 'QIIME') {
+    $acacia_config_hash{TRIM_TO_LENGTH} = $default_trim_length;
+    $acacia_config_hash{FILTER_N_BEFORE_POS} = $default_trim_length;
+    
+    my $split_library_params;
+    if ($QA_params->{ION_TORRENT}) {    
+        $split_library_params = {-l => 150,
+                                 -s => 15};
+        $acacia_config_hash{TRIM_TO_LENGTH} = 150;
+        $acacia_config_hash{FILTER_N_BEFORE_POS} = 150;
+    }
+    
+    print "All good!\n";
+    
+    #### start the $QA_dir pipeline!
+    $split_library_params->{'-a'} = 2;
+    $split_library_params->{'-H'} = 10;
+    $split_library_params->{'-M'} = 1;
+    $split_library_params->{'-d'} = '';
+    splitLibraries($job_ID, $split_library_params);
+    removeChimeras();
+    denoise();
+    
+    #### Fix the config file
+    print "Fixing read counts...\n";
+    getReadCounts(0);
+    updateConfigQA($options->{'config'});
+    
+    print "QA complete!\n";
+} else {
+    my $split_library_params = {-l => $default_trim_length,
+                                -t => '',
+                                -k => '',
+                                -d => '',
+                                -s => 20,
+                                -a => 20,
+                                -H => 40,
+                                -M => 1};
+    splitLibraries($job_ID, $split_library_params);
+    truncateFastaAndQual();
+    `mv seqs_filtered.fasta seqs_trimmed.fna`;
+    `mv seqs_filtered_filtered.qual seqs_trimmed.qual`;
+    
+    getReadCounts(1);
+    updateConfigQA($options->{'config'});
+}
 
-#### Fix the config file
-print "Fixing read counts...\n";
-getReadCounts();
-updateConfigQA($options->{'config'});
-
-print "QA complete!\n";
 
 ######################################################################
 # CUSTOM SUBS
