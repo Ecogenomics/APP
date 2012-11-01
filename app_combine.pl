@@ -359,6 +359,22 @@ __DATA__
 =head1 DESCRIPTION
 
    Does filtering, denoising and de-replication of 454 pyrotag datasets
+   
+=head1 EXAMPLE USAGE
+
+   First, create a new directory for working in:
+     
+    mkdir my_combined_jobs
+    cd my_combined_jobs
+       
+   Then symlink the relevant job IDs from /srv/whitlam/bio/data e.g. to combine jobs 75 and 85:
+   
+    ln -s /srv/whitlam/bio/data/pyrotags/by_jobid/75 .
+    ln -s /srv/whitlam/bio/data/pyrotags/by_jobid/85 .
+    
+   Then run app_combine.pl according to the instructions below e.g. to combine all the samples from those jobs, using a trim length of 250bp:
+    
+    app_combine.pl -j 75,85 -l 250
 
 =head1 SYNOPSIS
 
