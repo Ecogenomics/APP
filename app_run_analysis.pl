@@ -88,7 +88,7 @@ our %acacia_config_hash = (
 
 my $options = checkParams();
 
-chdir($options->{'d'}) or die;
+chdir($options->{'d'}) or die "No such directory: " . $options->{'d'} . "\n";
 printAtStart();
 #qiime_standard_pipeline();
 my $config_hash;
@@ -376,6 +376,7 @@ sub qiime_pipeline {
         
         my $updated_sample_counts = get_read_counts_from_OTU_table("$results_dir/non_normalised_otu_table.txt");
             
+        print Dumper($updated_sample_counts);
         open($fh, ">sample_exclusion.txt");
         print {$fh} "#NAME\tREAD COUNT\tUSE\n";
         foreach my $sample_count (@{$updated_sample_counts}) {
@@ -423,7 +424,11 @@ sub qiime_pipeline {
             normalise_OTU_table($params, $processing_dir, $global_norm_sample_size,
                                 scalar keys %sample_counts);
             
-        `cp $normalised_OTU_file $results_dir/normalised_otu_table.txt`
+        `cp $normalised_OTU_file $results_dir/normalised_otu_table.txt`;
+        
+        checkAndRunCommand("reformat_otu_table.py",  [{-i => "$results_dir/normalised_otu_table.txt",
+                                                       -t => "$processing_dir/rep_set_tax_assignments.txt",
+                                                       -o => "$results_dir/normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
     }
     
 }
@@ -482,226 +487,248 @@ sub cd_hit_otu_pipeline {
         $are_sample_lists_equal = 0;
     }
 
-    # If we are running for the first time, or if sample_exclusions.txt has been modified,
-    # reset the pipeline. Otherwise, restart the pipeline from where it left of.
+       # If we are running for the first time, or if sample_exclusions.txt has been modified,
+    # reset the pipeline. 
     
-    if ((! -e $global_qiime_mapping_filename) || (! $are_sample_lists_equal)) {
-        $config_hash->{PIPELINE_STAGE} = "";
+    if ((! -e $global_qiime_mapping_filename) || (! $are_sample_lists_equal) || (! exists($config_hash->{PIPELINE_STAGE}))) {
+        $config_hash->{PIPELINE_STAGE} = "PREAMBLE";
     } 
-    if ($config_hash->{PIPELINE_STAGE}) {
-        goto $config_hash->{PIPELINE_STAGE};
-    }
     
+    if ($config_hash->{PIPELINE_STAGE} eq "PREAMBLE") {
+        
     # (Re)create the QIIME mapping file, taking sample_exclusions.txt into account.
         
-    my ($sample_array, $config_array) =
-        parse_app_config_file("app.config");
-    
-    my $new_sample_array;
-    foreach my $sample_array_ptr (@{$sample_array}) {
-        if (exists $sample_counts{$sample_array_ptr->[0]}) {
-            push @{$new_sample_array}, $sample_array_ptr;
+        my ($sample_array, $config_array) =
+            parse_app_config_file("app.config");
+        
+        my $new_sample_array;
+        foreach my $sample_array_ptr (@{$sample_array}) {
+            if (exists $sample_counts{$sample_array_ptr->[0]}) {
+                push @{$new_sample_array}, $sample_array_ptr;
+            }
         }
+        
+        create_qiime_mapping_file($global_qiime_mapping_filename, $new_sample_array);
+        
+    
+    
+        # Begin the pipeline...
+        
+        my $params = [{-M => 1,
+                    -q => 'raw_sequences.qual',
+                    -f => 'raw_sequences.fasta',
+                    -d => '',
+                    -m => $global_qiime_mapping_filename,
+                    -b => 'variable_length',
+                    -a => 20,
+                    -H => 40,
+                    -k => '',
+                    -s => 20,
+                    -l => $config_hash->{TRIM_LENGTH},
+                    -t => ''}];
+        
+        
+        splitLibraries($params);
+        
+        if (-z 'seqs.fna') {
+            croak "ERROR: No sequences in seqs.fna (no sequences successfully demultiplexed after split_libraries.py).\n" .
+            "Check the config file that the barcode/primer sequences are correct.\n"
+        }
+        
+        $config_hash->{PIPELINE_STAGE} = "TRIM_SEQS";
+        
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
     }
     
-    create_qiime_mapping_file($global_qiime_mapping_filename, $new_sample_array);
+    if ($config_hash->{PIPELINE_STAGE} eq "TRIM_SEQS") {
     
-    # Begin the pipeline...
+        my $params = [{-f => 'seqs.fna',
+                    -q => 'seqs_filtered.qual',
+                    -b => $config_hash->{TRIM_LENGTH}}];
+        
+        truncateFastaAndQual($params);
+        
+        if (-z 'seqs_filtered.fasta') {
+          croak "ERROR: No sequences in seqs_filtered.fna (no sequences successfully trimmed after truncate_fasta_qual_files.py).\n" .
+          "Check the config file that the barcode/primer sequences are correct.\n"
+        }
+        
+        $config_hash->{PIPELINE_STAGE} = "ACACIA";
+        
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
     
-    my $params = [{-M => 1,
-                -q => 'raw_sequences.qual',
-                -f => 'raw_sequences.fasta',
-                -d => '',
-                -m => $global_qiime_mapping_filename,
-                -b => 'variable_length',
-                -a => 20,
-                -H => 40,
-                -k => '',
-                -s => 20,
-                -l => $config_hash->{TRIM_LENGTH},
-                -t => ''}];
-    
-    
-    splitLibraries($params);
-    
-    if (-z 'seqs.fna') {
-        croak "ERROR: No sequences in seqs.fna (no sequences successfully demultiplexed after split_libraries.py).\n" .
-        "Check the config file that the barcode/primer sequences are correct.\n"
     }
-    
-    $config_hash->{PIPELINE_STAGE} = "TRIM_SEQS";
-    
-    create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
-    
-    TRIM_SEQS:
-    
-    $params = [{-f => 'seqs.fna',
-                -q => 'seqs_filtered.qual',
-                -b => $config_hash->{TRIM_LENGTH}}];
-    
-    truncateFastaAndQual($params);
-    
-    if (-z 'seqs_filtered.fasta') {
-      croak "ERROR: No sequences in seqs_filtered.fna (no sequences successfully trimmed after truncate_fasta_qual_files.py).\n" .
-      "Check the config file that the barcode/primer sequences are correct.\n"
-    }
-    
-    $config_hash->{PIPELINE_STAGE} = "ACACIA";
-    
-    create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
-    
-    ACACIA:
     
     my $fasta_output_file = 'seqs_filtered.fasta';
     
-    if (! exists($pipeline_modifiers->{NO_ACACIA})) {
+    if ($config_hash->{PIPELINE_STAGE} eq "ACACIA") {
     
-        $acacia_config_hash{'FASTA_LOCATION'} = 'seqs_filtered.fasta';
+        my $fasta_output_file = 'seqs_filtered.fasta';
         
-        $acacia_config_hash{TRIM_TO_LENGTH} = $config_hash->{TRIM_LENGTH};
+        if (! exists($pipeline_modifiers->{NO_ACACIA})) {
         
-        my $acacia_config_file = create_acacia_config_file(\%acacia_config_hash);
+            $acacia_config_hash{'FASTA_LOCATION'} = 'seqs_filtered.fasta';
+            
+            $acacia_config_hash{TRIM_TO_LENGTH} = $config_hash->{TRIM_LENGTH};
+            
+            my $acacia_config_file = create_acacia_config_file(\%acacia_config_hash);
+            
+            my $params_array = [["-XX:+UseConcMarkSweepGC",
+                                 "-Xmx100G"],
+                                 {-jar => '$ACACIA'},
+                                 {-c => $acacia_config_file}];
+            
+            mkdir('denoised_acacia');
+            
+            if (run_acacia($params_array)) {
+                die "Acacia failed.\n";
+            };
+            
+            unlink($acacia_config_file);
+            
+            $fasta_output_file = "denoised_acacia/acacia_out_all_tags.seqOut";
+        }
         
-        my $params_array = [["-XX:+UseConcMarkSweepGC",
-                             "-Xmx100G"],
-                             {-jar => '$ACACIA'},
-                             {-c => $acacia_config_file}];
+        $config_hash->{PIPELINE_STAGE} = "CD_HIT_OTU";
         
-        mkdir('denoised_acacia');
-        
-        if (run_acacia($params_array)) {
-            die "Acacia failed.\n";
-        };
-        
-        unlink($acacia_config_file);
-        
-        $fasta_output_file = "denoised_acacia/acacia_out_all_tags.seqOut";
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+    
     }
     
-    $config_hash->{PIPELINE_STAGE} = "CD_HIT_OTU";
-    
-    create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
-    
-    CD_HIT_OTU:
-    
-    print "----------------------------------------------------------------\n";
-    print "Start TABLE BASED NORMALISATION data set processing...\n";
-    print "----------------------------------------------------------------\n";
-    print "Copying reads for analysis...\n";
-    
-    print "Running CD-HIT-OTU\n";
     my $cd_hit_otu_dir = dirname(`which cd-hit-otu-all.pl`);
-    checkAndRunCommand("$cd_hit_otu_dir/cd-hit-otu-all.pl",
-                       [{-i => $fasta_output_file,
-                         -m => "false",
-                         -o => "$processing_dir/cd_hit_otu"}], DIE_ON_FAILURE);
     
-    my $rep_set_otu_array =
-        reformat_CDHIT_repset("$processing_dir/cd_hit_otu/OTU",
-                              "$processing_dir/cd_hit_otu/OTU_numbered");
-   
-    $config_hash->{PIPELINE_STAGE} = "ASSIGN_TAXONOMY";
+    if ($config_hash->{PIPELINE_STAGE} eq "CD_HIT_OTU") {
+    
+        print "----------------------------------------------------------------\n";
+        print "Start TABLE BASED NORMALISATION data set processing...\n";
+        print "----------------------------------------------------------------\n";
+        print "Copying reads for analysis...\n";
         
-    create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
-    
-    ASSIGN_TAXONOMY:
-    
-    print "Assigning taxonomy for non normalised data set...\n";
-    
-    # update our databases (GG by default)
-    my $TAX_tax_file = $QIIME_TAX_tax_file;
-    my $TAX_blast_file = $QIIME_TAX_blast_file;
-    my $TAX_aligned_blast_file = $QIIME_TAX_aligned_blast_file;
-    my $imputed_file = $QIIME_imputed_file;
-    
-    #print "Assign taxonomy method: $assign_taxonomy_method\n";
-    #if ($assign_taxonomy_method eq 'blast') {
-        checkAndRunCommand("assign_taxonomy.py", [{-i => "$processing_dir/cd_hit_otu/OTU_numbered",
-                                                    -t => $TAX_tax_file,
-                                                    -b => $TAX_blast_file,
-                                                    -m => "blast",
-                                                    -a => 10,
-                                                    -e => 0.001,
-                                                    -o => $processing_dir}], DIE_ON_FAILURE);
-    #} elsif ($assign_taxonomy_method eq 'bwasw') {
-    #    checkAndRunCommand("assign_taxonomy.py", [{-i => "$processing_dir/cd_hit_otu/OTU_numbered",
-    #                                                -t => $TAX_tax_file,
-    #                                                -d => $TAX_blast_file,
-    #                                                -m => "bwasw",
-    #                                                -a => $num_threads,
-    #                                                -o => $global_TB_processing_dir}], DIE_ON_FAILURE);
-    #} else {
-    #    die "Unrecognised assign_taxonomy method: '$assign_taxonomy_method'";
-    #}
-    
-    $config_hash->{PIPELINE_STAGE} = "GENERATE_OTU_TABLE";
+        print "Running CD-HIT-OTU\n";
+        checkAndRunCommand("$cd_hit_otu_dir/cd-hit-otu-all.pl",
+                           [{-i => $fasta_output_file,
+                             -m => "false",
+                             -o => "$processing_dir/cd_hit_otu"}], DIE_ON_FAILURE);
         
-    create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        my $rep_set_otu_array =
+            reformat_CDHIT_repset("$processing_dir/cd_hit_otu/OTU",
+                                  "$processing_dir/cd_hit_otu/OTU_numbered");
+       
+        $config_hash->{PIPELINE_STAGE} = "ASSIGN_TAXONOMY";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
     
-    GENERATE_OTU_TABLE:
-    
-    print "Assigning sample counts to clusters: \n";
-    checkAndRunCommand("$cd_hit_otu_dir/clstr_sample_count_matrix.pl",
-                       [["_", "$processing_dir/cd_hit_otu/OTU.nr2nd.clstr"]]);
-    
-    print "Making NON NORMALISED otu table...\n";
-    
-    create_QIIME_OTU_from_CDHIT("$processing_dir/OTU_numbered_tax_assignments.txt",
-                                "$processing_dir/cd_hit_otu/OTU.nr2nd.clstr.otu.txt",
-                                "$results_dir/non_normalised_otu_table.txt");
-    
-    print "Reformating OTU table...\n";
-    checkAndRunCommand("reformat_otu_table.py",  [{-i => "$results_dir/non_normalised_otu_table.txt",
-                                                   -t => "$processing_dir/OTU_numbered_tax_assignments.txt",
-                                                   -o => "$results_dir/non_normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
-
-    my @updated_sample_counts = get_read_counts_from_cd_hit_otu("$processing_dir/cd_hit_otu/OTU.nr2nd.clstr.sample.txt");
-        
-    open($fh, ">sample_exclusion.txt");
-    print {$fh} "#NAME\tREAD COUNT\tUSE\n";
-    foreach my $sample_count (@updated_sample_counts) {
-        print {$fh} $sample_count->[0] . "\t" . $sample_count->[1] ."\t1\n"  ;
-        $sample_counts{$sample_count->[0]} = $sample_count->[1];
     }
-    close($fh);
     
-    print "Non-normalized OTU table has now been generated.\n";
-    print "\nCheck the " . $options->{'d'} . " sample_exclusion.txt and choose which samples you wish to exclude.\n";
-    print "When you have chosen which samples to exclude, run the following command:\n";
-    print "      app_run_analysis.pl -d " . $options->{'d'} . "\n\n";
+    if ($config_hash->{PIPELINE_STAGE} eq "ASSIGN_TAXONOMY") {
     
-    $config_hash->{PIPELINE_STAGE} = "NORMALISATION";
+        print "Assigning taxonomy for non normalised data set...\n";
         
-    create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
-    
-    exit();
-    
-    NORMALISATION:
-    use Data::Dumper;
-    print Dumper(\%sample_counts);
-    
-    my $min_samples = min(map {$sample_counts{$_}} keys %sample_counts);
-    
-    my $global_rare_X = int($min_samples / 50) * 50;
-    my $global_norm_sample_size = int($min_samples / 50) * 50;
-    print "Correcting normalisation depth to $global_norm_sample_size sequences...\n";
-    
-    my $global_norm_num_reps = 1000;
-    
-    print "Normalizing non normalised table at $global_norm_sample_size sequences... [$global_norm_sample_size, $global_norm_num_reps]\n";
-    
-    $params = [{-i => "$results_dir/non_normalised_otu_table.txt",
-                -o => "$processing_dir/rare_tables/",
-                -d => $global_norm_sample_size,
-                -n => $global_norm_num_reps},
-                ["--lineages_included"],
-                ["--k"]];
-    
-    my $normalised_OTU_file = 
-        normalise_OTU_table($params, $processing_dir, $global_norm_sample_size,
-                            scalar keys %sample_counts);
+        # update our databases (GG by default)
+        my $TAX_tax_file = $QIIME_TAX_tax_file;
+        my $TAX_blast_file = $QIIME_TAX_blast_file;
+        my $TAX_aligned_blast_file = $QIIME_TAX_aligned_blast_file;
+        my $imputed_file = $QIIME_imputed_file;
         
-    `cp $normalised_OTU_file $results_dir/normalised_otu_table.txt`
+        #print "Assign taxonomy method: $assign_taxonomy_method\n";
+        #if ($assign_taxonomy_method eq 'blast') {
+            checkAndRunCommand("assign_taxonomy.py", [{-i => "$processing_dir/cd_hit_otu/OTU_numbered",
+                                                        -t => $TAX_tax_file,
+                                                        -b => $TAX_blast_file,
+                                                        -m => "blast",
+                                                        -a => 10,
+                                                        -e => 0.001,
+                                                        -o => $processing_dir}], DIE_ON_FAILURE);
+        #} elsif ($assign_taxonomy_method eq 'bwasw') {
+        #    checkAndRunCommand("assign_taxonomy.py", [{-i => "$processing_dir/cd_hit_otu/OTU_numbered",
+        #                                                -t => $TAX_tax_file,
+        #                                                -d => $TAX_blast_file,
+        #                                                -m => "bwasw",
+        #                                                -a => $num_threads,
+        #                                                -o => $global_TB_processing_dir}], DIE_ON_FAILURE);
+        #} else {
+        #    die "Unrecognised assign_taxonomy method: '$assign_taxonomy_method'";
+        #}
+        
+        $config_hash->{PIPELINE_STAGE} = "GENERATE_OTU_TABLE";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+    
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "GENERATE_OTU_TABLE") {
+    
+        print "Assigning sample counts to clusters: \n";
+        checkAndRunCommand("$cd_hit_otu_dir/clstr_sample_count_matrix.pl",
+                           [["_", "$processing_dir/cd_hit_otu/OTU.nr2nd.clstr"]]);
+        
+        print "Making NON NORMALISED otu table...\n";
+        
+        create_QIIME_OTU_from_CDHIT("$processing_dir/OTU_numbered_tax_assignments.txt",
+                                    "$processing_dir/cd_hit_otu/OTU.nr2nd.clstr.otu.txt",
+                                    "$results_dir/non_normalised_otu_table.txt");
+        
+        print "Reformating OTU table...\n";
+        checkAndRunCommand("reformat_otu_table.py",  [{-i => "$results_dir/non_normalised_otu_table.txt",
+                                                       -t => "$processing_dir/OTU_numbered_tax_assignments.txt",
+                                                       -o => "$results_dir/non_normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
+    
+        my @updated_sample_counts = get_read_counts_from_cd_hit_otu("$processing_dir/cd_hit_otu/OTU.nr2nd.clstr.sample.txt");
+            
+        open($fh, ">sample_exclusion.txt");
+        print {$fh} "#NAME\tREAD COUNT\tUSE\n";
+        foreach my $sample_count (@updated_sample_counts) {
+            print {$fh} $sample_count->[0] . "\t" . $sample_count->[1] ."\t1\n"  ;
+            $sample_counts{$sample_count->[0]} = $sample_count->[1];
+        }
+        close($fh);
+        
+        print "Non-normalized OTU table has now been generated.\n";
+        print "\nCheck the " . $options->{'d'} . "/sample_exclusion.txt and choose which samples you wish to exclude.\n\n";
+        print "      vim " . $options->{'d'} . "/sample_exclusion.txt" . "\n\n";
+        print "When you have chosen which samples to exclude, run the following command:\n\n";
+        print "      app_run_analysis.pl -d " . $options->{'d'} . "\n\n";
+        
+        $config_hash->{PIPELINE_STAGE} = "NORMALISATION";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        
+        exit();
+    
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "NORMALISATION") {
+        
+        use Data::Dumper;
+        print Dumper(\%sample_counts);
+        
+        my $min_samples = min(map {$sample_counts{$_}} keys %sample_counts);
+        
+        my $global_rare_X = int($min_samples / 50) * 50;
+        my $global_norm_sample_size = int($min_samples / 50) * 50;
+        print "Correcting normalisation depth to $global_norm_sample_size sequences...\n";
+        
+        my $global_norm_num_reps = 1000;
+        
+        print "Normalizing non normalised table at $global_norm_sample_size sequences... [$global_norm_sample_size, $global_norm_num_reps]\n";
+        
+        my $params = [{-i => "$results_dir/non_normalised_otu_table.txt",
+                    -o => "$processing_dir/rare_tables/",
+                    -d => $global_norm_sample_size,
+                    -n => $global_norm_num_reps},
+                    ["--lineages_included"],
+                    ["--k"]];
+        
+        my $normalised_OTU_file = 
+            normalise_OTU_table($params, $processing_dir, $global_norm_sample_size,
+                                scalar keys %sample_counts);
+            
+        `cp $normalised_OTU_file $results_dir/normalised_otu_table.txt`;
+        
+        checkAndRunCommand("reformat_otu_table.py",  [{-i => "$results_dir/normalised_otu_table.txt",
+                                                       -t => "$processing_dir/rep_set_tax_assignments.txt",
+                                                       -o => "$results_dir/normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
+    }
     
 }
 

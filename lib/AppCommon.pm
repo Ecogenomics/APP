@@ -226,7 +226,7 @@ sub get_read_counts_from_OTU_table {
     }
     my @sample_counts;
     for (my $i = 0; $i < scalar @headers; $i++) {
-        push @sample_counts, [$headers[0], $counts[0]];
+        push @sample_counts, [$headers[$i], $counts[$i]];
     }
     return \@sample_counts;
 }

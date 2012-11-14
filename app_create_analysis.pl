@@ -58,7 +58,12 @@ printAtStart();
 # Setup the analysis folder
 my $params_hash = {};
 
+if (! -e $options->{'c'}) {
+    die "Unable to find config file: " . $options->{'c'} . "\n";
+}
+
 my $job_name = basename($options->{'c'});
+
 if ($job_name =~ /app_(.*).config$/) {
     $job_name = $1;
 } else {
