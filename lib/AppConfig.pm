@@ -34,6 +34,8 @@ our @EXPORT=qw(
     IGNORE_FAILURE
     WARN_ON_FAILURE
     DIE_ON_FAILURE
+    $global_analysis_config_filename
+    $global_qiime_mapping_filename
     %FNB 
     %FNA 
     $FNB_HEADER 
@@ -113,19 +115,15 @@ our @EXPORT=qw(
     getWorkingDirs 
     makeOutputDirs 
     makeResultsDirs
-    makeImageDirs
-    splitLibraries 
-    removeChimeras 
+    makeImageDirs 
     denoise 
     getReadCounts 
     parseConfigQA 
     updateConfigQA
-    updateAcaciaConfigHash
-    returnAcaciaConfigString
     );
 
 # Version of this APP (update for each release candidate/tag)
-our $VERSION = '2.3.6';
+our $VERSION = '3.0.0';
 
 # Failure modes when executing a command
 use constant {
@@ -133,6 +131,10 @@ use constant {
     WARN_ON_FAILURE => 1,
     DIE_ON_FAILURE => 2
 };
+
+our $global_analysis_config_filename = "config.txt";
+our $global_qiime_mapping_filename = "qiime_mapping.txt";
+
 
 #
 # A file is created in PyroDB which can be used to split the sff file and 
@@ -199,7 +201,7 @@ our $APP_BYRUN = $APP_ROOT."/by_run";
 #
 # We make a number of directories during the process. Store their names here
 #
-our $QA_dir = "QA";
+our $QA_dir = "QA_CD_HIT_OTU";
 our $proc_dir = "processing";
 our $res_dir = "results";
 our $image_dir = "images";
@@ -208,36 +210,7 @@ our $global_acacia_output_dir = "UNSET";
 our $global_working_dir = "UNSET";
 our $global_mapping_file = "UNSET";
 
-#
-# Here we keep the default acacia config hash
-#
 
-our %acacia_config_hash = (
-     ANY_DIFF_SIGNIFICANT_FOR_TWO_SEQS => "TRUE",
-     AVG_QUALITY_CUTOFF => 30,
-     ERROR_MODEL => "Balzer",
-     FASTA => "TRUE",
-     FASTA_LOCATION => "good.fasta",
-     FASTQ => "FALSE",
-     FASTQ_LOCATION => "null",
-     FILTER_N_BEFORE_POS => 250,
-     FLOW_KEY => "TCAG",
-     MAXIMUM_MANHATTAN_DISTANCE => 13,
-     MAX_RECURSE_DEPTH => 2,
-     MAX_STD_DEV_LENGTH => 2,
-     MID_FILE => ".dummmy",
-     MID_OPTION => "NO_MID",
-     MIN_FLOW_TRUNCATION => 150,
-     MIN_READ_REP_BEFORE_TRUNCATION => 0.0,
-     OUTPUT_DIR => "denoised_acacia",
-     OUTPUT_PREFIX => "acacia_out",
-     QUAL_LOCATION => "null",
-     REPRESENTATIVE_SEQUENCE => "Mode",
-     SIGNIFICANCE_LEVEL => -9,
-     SPLIT_ON_MID => "FALSE",
-     TRIM_TO_LENGTH => 250,
-     TRUNCATE_READ_TO_FLOW => ""
-);
 
 #
 # The is the default trim length during QA.
@@ -416,16 +389,19 @@ sub handleCommandFailure {
     }
 }
 
-
 sub getWorkingDirs
 {
     #-----
     # Set a number of output directories
     #
-    my ($base_directory, $results_output_dir) = @_;
+    my ($base_directory, $results_output_dir, $analysis_type) = @_;
     
     # get the acacia denoised directory
     $global_acacia_output_dir = $acacia_config_hash{'OUTPUT_DIR'};
+    
+    if ($analysis_type eq "QIIME") {
+        $QA_dir = "QA_QIIME"
+    }
 
     # Get the working dir
     # working dir is the dir of the config file
@@ -504,114 +480,10 @@ sub makeImageDirs
     $global_R_log_file = $global_image_dir."/R.log"; 
 }
 
-sub splitLibraries
-{
-    #-----
-    # Wrapper for Qiime split libraries
-    #
-    my ($job_ID, $params) = @_;
-    print "Splitting libraries...\n";
-    my @fasta_files;
-    foreach my $suffix ((".fa", ".fna", ".fasta")) {
-        if (-e "../$job_ID$suffix") {
-            push @fasta_files, "$job_ID$suffix";
-        }
-    }
-    if (scalar @fasta_files) {
-        if (scalar @fasta_files > 1) {
-            croak "ERROR: Too many possible FASTA files to choose, remove or rename " .
-            "to remove ambiguity. Offending files: " . join(", ", @fasta_files) . "\n";
-        }
-    } else {
-        croak "ERROR: Unable to find fasta file for app_do_QA.pl: $job_ID.fna\n";
-    }
-    my $default_params = {-m => $QIIME_map_file,
-                          -f => "../" . $fasta_files[0],
-                          -q => "../$job_ID.qual",
-                          -b => $global_barcode_length,
-                          -a => 2,
-                          -H => 10,
-                          -M => 1,
-                          -d => ''};
-                          #-s => 20,
-                          #-l => 250,
-                          #-w => 10};
-    foreach my $key (keys %{$params}) {
-        $default_params->{$key} = $params->{$key}
-    }
-    checkAndRunCommand("split_libraries.py", [$default_params], DIE_ON_FAILURE);
-}
 
-sub removeChimeras
-{
-    #-----
-    # Remove chimeras using uclust
-    #
-    if (-z 'seqs.fna') {
-        croak "ERROR: No sequences in seqs.fna (no sequences successfully demultiplexed after split_libraries.py).\n" .
-        "Check the config file that the barcode/primer sequences are correct.\n"
-    }
-    
-    print "Removing chimeras...\n";
-        
-    checkAndRunCommand("usearch", [{'-uchime_ref' => 'seqs.fna'},
-                                   {'-db' => $QIIME_TAX_blast_file,
-                                    '-strand' => 'both',
-                                    '-threads' => 10,
-                                    '-nonchimeras' => $CHIME_good_file,
-                                    '-chimeras' => $CHIME_bad_file}], DIE_ON_FAILURE);
-}
 
-sub denoise
-{
-    #-----
-    # run acacia on the data
-    #
-    my ($param) = @_;
-    
-    # Create a temporary file to dump the config
-    my ($tmp_fh, $config_filename) = tempfile("acacia_XXXXXXXX", UNLINK => 1);
-    
-    # Unbuffer the output of $tmp_fh
-    select($tmp_fh);
-    $| = 1;
-    select(STDOUT);
-    
-    # Write to the temporary acacia config file
-    print {$tmp_fh} returnAcaciaConfigString();
-        
-    print "Denoising using acacia...\n";
-    
-    # Because acacia's return value is 1 on success (instead of the traditional
-    # zero), we need to ignore on failure and test if the stats file was written
-    # to.
-    my $params_array = [["-XX:+UseConcMarkSweepGC",
-                         "-Xmx100G"],
-                         {-jar => '$ACACIA'},
-                         {-c => $config_filename}];
-    
-    checkAndRunCommand("java", $params_array, IGNORE_ON_FAILURE);
-    
-    my $stats_file = $acacia_config_hash{OUTPUT_DIR} . "/" .
-        $acacia_config_hash{OUTPUT_PREFIX} . "_all_tags.stats";
-    
-    # If the stats file doesn't exist or is zero size, die and raise an error.
-    if ((! -e $stats_file) || (-z $stats_file)) {
-        print "\n################# WARNING!!!!!!!!!! #################\n" .
-              "The ACACIA stats file was not written to!!!\n" .
-              "You should check the acacia_standard_error.txt and\n" .
-              "acacia_standard_debug.txt in the QA/denoised_acacia/\n" .
-              "directory before proceeding to app_make_results.pl to\n" .
-              "ensure ACACIA completed successfully.\n" .
-              "#####################################################\n\n"   
-    }
-    #`java -XX:+UseConcMarkSweepGC -Xmx10G -jar \$ACACIA -c $config_filename`;
-    #`sed -i -e "s/all_tags_[^ ]* //" $global_acacia_output_dir/$ACACIA_out_file`;
-    
-    # Close the handle to the temp file, perl will handle deleting.
-    print "Closing temp file..\n";
-    close($tmp_fh);
-}
+
+
 
 sub getReadCounts
 {
@@ -625,6 +497,7 @@ sub getReadCounts
     # $CHIME_good_file
     # $global_acacia_output_dir/$ACACIA_out_file
     #
+    my $raw_only = shift;
     open my $tmp_fh, "<", $QIIME_split_out or die $!;
     while(<$tmp_fh>)
     {
@@ -642,9 +515,16 @@ sub getReadCounts
             {
                 # this guy begins with the exact MID
                 $global_raw_counts{$uid}++;
+                if ($raw_only) {
+                    $global_chimer_counts{$uid}++;
+                    $global_acacia_counts{$uid}++;
+                }
                 last;
             }
         }
+    }
+    if ($raw_only) {
+        return;
     }
     open $tmp_fh, "<", $CHIME_good_file or die $!;
     while(<$tmp_fh>)
@@ -692,7 +572,7 @@ sub parseConfigQA
     #
     my ($config_prefix, $return_params_hash) = @_;
     open my $conf_fh, "<", $config_prefix or die $!;
-    open my $mapping, ">", $global_mapping_file or die $!;
+    open my $mapping, ">", "qiime_mapping.txt" or die $!;
     print $mapping "$FNB_HEADER\n";
     my $used_sample_count = 0;
     # Parse the sample information.
@@ -773,32 +653,6 @@ sub updateConfigQA
     
     my $mv_string  = "mv ../$config_prefix.tmp ../$config_prefix";
     `$mv_string`;
-}
-
-sub updateAcaciaConfigHash {
-    my ($config_file) = @_;
-    open(my $fh, "<", $config_file);
-    while (my $line = <$fh>) {
-        if ($line =~ /^(.*)=(.*)$/) {
-            $acacia_config_hash{$1} = $2;
-        }
-    }
-    close($fh);
-}
-
-sub returnAcaciaConfigString {
-    #-----
-    # return the Acacia config as a string (for writing to a file)
-    #
-    use Data::Dumper;
-    my ($config_hash_ref) = @_;
-    my %config_hash;
-    if (! defined($config_hash_ref)) {
-        %config_hash = %acacia_config_hash;
-    } else {
-        %config_hash = %{$config_hash_ref};
-    };
-    return join("\n", map({$_ ."=" .$config_hash{$_}} sort {$a cmp $b} keys %config_hash));
 }
 
 sub qiimeify_uid {
