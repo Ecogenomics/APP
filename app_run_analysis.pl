@@ -147,47 +147,55 @@ sub qiime_pipeline {
     mkdir($processing_dir) if (! -e $processing_dir);
     mkdir($results_dir) if (! -e $results_dir);
     
-    my %sample_counts;
-    open(my $fh, "sample_exclusion.txt");
-    <$fh>;
-    while (my $line = <$fh>) {
-        chomp $line;
-        my @splitline = split /\t/, $line;
-        # If the sample is being used, record the sample count.
-        if ($splitline[$#splitline]) {
-            $sample_counts{$splitline[0]} = $splitline[1];
-        }
-    }
-    close($fh);
-    
-    my @splitline = split /,/, $config_hash->{SAMPLES};
-    my %starting_samples = map {$_ => 1} @splitline;
-    
     if (! exists ($config_hash->{TRIM_LENGTH})) {
         $config_hash->{TRIM_LENGTH} = 250;
     }
     
-    # Check that sample_exclusions.txt hasn't been modified (sample lists will be unequal).
+    my @starting_samples = split /,/, $config_hash->{SAMPLES};
     
-    my $are_sample_lists_equal = 1;
-    if ((scalar keys %starting_samples) == (scalar keys %sample_counts) ) {
-        foreach my $sample_name (keys %starting_samples) {
-            if (! exists $sample_counts{$sample_name}) {
-                $are_sample_lists_equal = 0;
+    my %sample_counts;
+    if (-e "sample_counts.txt") {
+        %sample_counts = %{get_read_counts_from_sample_counts("sample_counts.txt")}
+    }
+    
+    my %sample_for_analysis_hash;
+    
+    my $need_to_reanalyse = 0;
+    if (! -e "sample_exclusion.txt") {
+        $config_hash->{SAMPLES_FOR_ANALYSIS} = $config_hash->{SAMPLES};
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        %sample_for_analysis_hash = map {$_ => 1} @starting_samples;
+        
+    } else {
+        my @previous_analysis = split /,/, $config_hash->{SAMPLES_FOR_ANALYSIS};
+        my %samples_to_use = %{read_sample_exclusion("sample_exclusion.txt")};
+        my @sample_for_analysis_array;
+        
+        foreach my $sample_name (@starting_samples) {
+            if ((defined $samples_to_use{$sample_name}) && $samples_to_use{$sample_name}) {
+                push @sample_for_analysis_array, $sample_name;
+            }
+        }
+        
+        $config_hash->{SAMPLES_FOR_ANALYSIS} = join ",", @sample_for_analysis_array;
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        
+        %sample_for_analysis_hash = map {$_ => 1} @sample_for_analysis_array;
+        foreach my $sample_name (@previous_analysis) {
+            if ((! exists ($sample_for_analysis_hash{$sample_name})) && ($sample_counts{$sample_name} != 0)) {
+                $need_to_reanalyse = 1;
                 last;
             }
         }
-    } else {
-        $are_sample_lists_equal = 0;
     }
-
+    
     # If we are running for the first time, or if sample_exclusions.txt has been modified,
     # reset the pipeline. 
     
-    if ((! -e $global_qiime_mapping_filename) || (! $are_sample_lists_equal) || (! exists($config_hash->{PIPELINE_STAGE}))) {
+    if ((! -e $global_qiime_mapping_filename) || ($need_to_reanalyse) || (! exists($config_hash->{PIPELINE_STAGE}))) {
         $config_hash->{PIPELINE_STAGE} = "PREAMBLE";
-    } 
-    
+    }     
+        
     if ($config_hash->{PIPELINE_STAGE} eq "PREAMBLE") {
         
     # (Re)create the QIIME mapping file, taking sample_exclusions.txt into account.
@@ -195,9 +203,11 @@ sub qiime_pipeline {
         my ($sample_array, $config_array) =
             parse_app_config_file("app.config");
         
+        my %sample_to_analyse = map {$_ => 1} split /,/, $config_hash->{SAMPLES_FOR_ANALYSIS};
+        
         my $new_sample_array;
         foreach my $sample_array_ptr (@{$sample_array}) {
-            if (exists $sample_counts{$sample_array_ptr->[0]}) {
+            if (exists $sample_to_analyse{$sample_array_ptr->[0]}) {
                 push @{$new_sample_array}, $sample_array_ptr;
             }
         }
@@ -374,17 +384,38 @@ sub qiime_pipeline {
                                                        -t => "$processing_dir/rep_set_tax_assignments.txt",
                                                        -o => "$results_dir/non_normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
         
-        my $updated_sample_counts = get_read_counts_from_OTU_table("$results_dir/non_normalised_otu_table.txt");
-            
-        print Dumper($updated_sample_counts);
+        my $otu_sample_counts = get_read_counts_from_OTU_table("$results_dir/non_normalised_otu_table.txt");
+        
+        use Data::Dumper;
+        print Dumper($otu_sample_counts);
+        
+        # If this is the first run through, create a file to record the sample_counts.
+        if (! -e "sample_counts.txt") {
+            open($fh, ">sample_counts.txt");
+            print {$fh} "#NAME\tREAD COUNT\n";
+            foreach my $sample_name (@starting_samples) {
+                if (! defined $otu_sample_counts->{$sample_name}) {
+                    $otu_sample_counts->{$sample_name} = 0; 
+                }
+                print {$fh} $sample_name. "\t" . $otu_sample_counts->{$sample_name} ."\n";
+                $sample_counts{$sample_name} = $otu_sample_counts->{$sample_name};
+            }
+            close($fh);
+        }
+                
+        my %previous_analysis_hash = map {$_ => 1} split /,/, $config_hash->{SAMPLES_FOR_ANALYSIS};
+       
         open($fh, ">sample_exclusion.txt");
         print {$fh} "#NAME\tREAD COUNT\tUSE\n";
-        foreach my $sample_count (@{$updated_sample_counts}) {
-            print {$fh} $sample_count->[0] . "\t" . $sample_count->[1] ."\t1\n"  ;
-            $sample_counts{$sample_count->[0]} = $sample_count->[1];
+        foreach my $sample_name (@starting_samples) {
+            my $use = 0;
+            if ($previous_analysis_hash{$sample_name} && $sample_counts{$sample_name}) {
+                $use = 1;
+            }
+            print {$fh} $sample_name. "\t" . $sample_counts{$sample_name} . "\t" . $use . "\n";
         }
-        close($fh);
-        
+        close($fh); 
+                
         print "Non-normalized OTU table has now been generated.\n";
         print "\nCheck the " . $options->{'d'} . " sample_exclusion.txt and choose which samples you wish to exclude.\n";
         print "When you have chosen which samples to exclude, run the following command:\n";
@@ -401,18 +432,24 @@ sub qiime_pipeline {
     if ($config_hash->{PIPELINE_STAGE} eq "NORMALISATION") {
 
         use Data::Dumper;
+        
         print Dumper(\%sample_counts);
         
-        my $min_samples = min(map {$sample_counts{$_}} keys %sample_counts);
+        my $min_samples = min(map {$sample_counts{$_}} keys %sample_for_analysis_hash);
         
-        my $global_rare_X = int($min_samples / 50) * 50;
-        my $global_norm_sample_size = int($min_samples / 50) * 50;
+        my $global_norm_sample_size = (int($min_samples / 50) - 1) * 50;
+        
+        if ($global_norm_sample_size <= 0) {
+            print "Unable to normalise, some samples have too few reads. Review " . $options->{'d'} . "/sample_exclusion.txt " .
+                  "and rerun app_run_analysis.pl -d " . $options->{'d'} . "\n\n";
+        }
+        
         print "Correcting normalisation depth to $global_norm_sample_size sequences...\n";
         
         my $global_norm_num_reps = 1000;
         
         print "Normalizing non normalised table at $global_norm_sample_size sequences... [$global_norm_sample_size, $global_norm_num_reps]\n";
-        
+                
         my $params = [{-i => "$results_dir/non_normalised_otu_table.txt",
                        -o => "$processing_dir/rare_tables/",
                        -d => $global_norm_sample_size,
@@ -429,6 +466,7 @@ sub qiime_pipeline {
         checkAndRunCommand("reformat_otu_table.py",  [{-i => "$results_dir/normalised_otu_table.txt",
                                                        -t => "$processing_dir/rep_set_tax_assignments.txt",
                                                        -o => "$results_dir/normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
+
     }
     
 }
@@ -453,44 +491,52 @@ sub cd_hit_otu_pipeline {
     mkdir($processing_dir) if (! -e $processing_dir);
     mkdir($results_dir) if (! -e $results_dir);
     
-    my %sample_counts;
-    open(my $fh, "sample_exclusion.txt");
-    <$fh>;
-    while (my $line = <$fh>) {
-        chomp $line;
-        my @splitline = split /\t/, $line;
-        # If the sample is being used, record the sample count.
-        if ($splitline[$#splitline]) {
-            $sample_counts{$splitline[0]} = $splitline[1];
-        }
-    }
-    close($fh);
-    
-    my @splitline = split /,/, $config_hash->{SAMPLES};
-    my %starting_samples = map {$_ => 1} @splitline;
-    
     if (! exists ($config_hash->{TRIM_LENGTH})) {
         $config_hash->{TRIM_LENGTH} = 250;
     }
     
-    # Check that sample_exclusions.txt hasn't been modified (sample lists will be unequal).
+    my @starting_samples = split /,/, $config_hash->{SAMPLES};
     
-    my $are_sample_lists_equal = 1;
-    if ((scalar keys %starting_samples) == (scalar keys %sample_counts) ) {
-        foreach my $sample_name (keys %starting_samples) {
-            if (! exists $sample_counts{$sample_name}) {
-                $are_sample_lists_equal = 0;
+    my %sample_counts;
+    if (-e "sample_counts.txt") {
+        %sample_counts = %{get_read_counts_from_sample_counts("sample_counts.txt")}
+    }
+    
+    my %sample_for_analysis_hash;
+    
+    my $need_to_reanalyse = 0;
+    if (! -e "sample_exclusion.txt") {
+        $config_hash->{SAMPLES_FOR_ANALYSIS} = $config_hash->{SAMPLES};
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        %sample_for_analysis_hash = map {$_ => 1} @starting_samples;
+        
+    } else {
+        my @previous_analysis = split /,/, $config_hash->{SAMPLES_FOR_ANALYSIS};
+        my %samples_to_use = %{read_sample_exclusion("sample_exclusion.txt")};
+        my @sample_for_analysis_array;
+        
+        foreach my $sample_name (@starting_samples) {
+            if ((defined $samples_to_use{$sample_name}) && $samples_to_use{$sample_name}) {
+                push @sample_for_analysis_array, $sample_name;
+            }
+        }
+        
+        $config_hash->{SAMPLES_FOR_ANALYSIS} = join ",", @sample_for_analysis_array;
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        
+        %sample_for_analysis_hash = map {$_ => 1} @sample_for_analysis_array;
+        foreach my $sample_name (@previous_analysis) {
+            if ((! exists ($sample_for_analysis_hash{$sample_name})) && ($sample_counts{$sample_name} != 0)) {
+                $need_to_reanalyse = 1;
                 last;
             }
         }
-    } else {
-        $are_sample_lists_equal = 0;
     }
-
-       # If we are running for the first time, or if sample_exclusions.txt has been modified,
+    
+    # If we are running for the first time, or if sample_exclusions.txt has been modified,
     # reset the pipeline. 
     
-    if ((! -e $global_qiime_mapping_filename) || (! $are_sample_lists_equal) || (! exists($config_hash->{PIPELINE_STAGE}))) {
+    if ((! -e $global_qiime_mapping_filename) || ($need_to_reanalyse) || (! exists($config_hash->{PIPELINE_STAGE}))) {
         $config_hash->{PIPELINE_STAGE} = "PREAMBLE";
     } 
     
@@ -501,17 +547,17 @@ sub cd_hit_otu_pipeline {
         my ($sample_array, $config_array) =
             parse_app_config_file("app.config");
         
+        my %sample_to_analyse = map {$_ => 1} split /,/, $config_hash->{SAMPLES_FOR_ANALYSIS};
+        
         my $new_sample_array;
         foreach my $sample_array_ptr (@{$sample_array}) {
-            if (exists $sample_counts{$sample_array_ptr->[0]}) {
+            if (exists $sample_to_analyse{$sample_array_ptr->[0]}) {
                 push @{$new_sample_array}, $sample_array_ptr;
             }
         }
         
         create_qiime_mapping_file($global_qiime_mapping_filename, $new_sample_array);
         
-    
-    
         # Begin the pipeline...
         
         my $params = [{-M => 1,
@@ -673,20 +719,46 @@ sub cd_hit_otu_pipeline {
                                                        -t => "$processing_dir/OTU_numbered_tax_assignments.txt",
                                                        -o => "$results_dir/non_normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
     
-        my @updated_sample_counts = get_read_counts_from_cd_hit_otu("$processing_dir/cd_hit_otu/OTU.nr2nd.clstr.sample.txt");
+        my $otu_sample_counts = get_read_counts_from_cd_hit_otu("$processing_dir/cd_hit_otu/OTU.nr2nd.clstr.sample.txt");
             
+        # If this is the first run through, create a file to record the sample_counts.
+        if (! -e "sample_counts.txt") {
+            open($fh, ">sample_counts.txt");
+            print {$fh} "#NAME\tREAD COUNT\n";
+            foreach my $sample_name (@starting_samples) {
+                if (! defined $otu_sample_counts->{$sample_name}) {
+                    $otu_sample_counts->{$sample_name} = 0; 
+                }
+                print {$fh} $sample_name. "\t" . $otu_sample_counts->{$sample_name} ."\n";
+                $sample_counts{$sample_name} = $otu_sample_counts->{$sample_name};
+            }
+            close($fh);
+        }
+                
+        my %previous_analysis_hash = map {$_ => 1} split /,/, $config_hash->{SAMPLES_FOR_ANALYSIS};
+        
+        
         open($fh, ">sample_exclusion.txt");
         print {$fh} "#NAME\tREAD COUNT\tUSE\n";
-        foreach my $sample_count (@updated_sample_counts) {
-            print {$fh} $sample_count->[0] . "\t" . $sample_count->[1] ."\t1\n"  ;
-            $sample_counts{$sample_count->[0]} = $sample_count->[1];
+        foreach my $sample_name (@starting_samples) {
+            my $use = 0;
+            if ($previous_analysis_hash{$sample_name} && $sample_counts{$sample_name}) {
+                $use = 1;
+            }
+            print {$fh} $sample_name. "\t" . $sample_counts{$sample_name} . "\t" . $use . "\n";
         }
         close($fh);
         
+        print Dumper(\%sample_counts);
+        
+        print "##############################################\n";
+        print "################ READ THIS ###################\n";
+        print "##############################################\n";
+        
         print "Non-normalized OTU table has now been generated.\n";
-        print "\nCheck the " . $options->{'d'} . "/sample_exclusion.txt and choose which samples you wish to exclude.\n\n";
+        print "Check the " . $options->{'d'} . "/sample_exclusion.txt and choose which samples you wish to exclude.\n";
         print "      vim " . $options->{'d'} . "/sample_exclusion.txt" . "\n\n";
-        print "When you have chosen which samples to exclude, run the following command:\n\n";
+        print "When you have chosen which samples to exclude, run the following command:\n";
         print "      app_run_analysis.pl -d " . $options->{'d'} . "\n\n";
         
         $config_hash->{PIPELINE_STAGE} = "NORMALISATION";
@@ -698,14 +770,16 @@ sub cd_hit_otu_pipeline {
     }
     
     if ($config_hash->{PIPELINE_STAGE} eq "NORMALISATION") {
+                  
+        my $min_samples = min(map {$sample_counts{$_}} keys %sample_for_analysis_hash);
         
-        use Data::Dumper;
-        print Dumper(\%sample_counts);
+        my $global_norm_sample_size = (int($min_samples / 50) - 1) * 50;
         
-        my $min_samples = min(map {$sample_counts{$_}} keys %sample_counts);
+        if ($global_norm_sample_size <= 0) {
+            print "Unable to normalise, some samples have too few reads. Review " . $options->{'d'} . "/sample_exclusion.txt " .
+                  "and rerun app_run_analysis.pl -d " . $options->{'d'} . "\n\n";
+        }
         
-        my $global_rare_X = int($min_samples / 50) * 50;
-        my $global_norm_sample_size = int($min_samples / 50) * 50;
         print "Correcting normalisation depth to $global_norm_sample_size sequences...\n";
         
         my $global_norm_num_reps = 1000;
@@ -721,15 +795,127 @@ sub cd_hit_otu_pipeline {
         
         my $normalised_OTU_file = 
             normalise_OTU_table($params, $processing_dir, $global_norm_sample_size,
-                                scalar keys %sample_counts);
+                                scalar keys %sample_for_analysis_hash);
             
         `cp $normalised_OTU_file $results_dir/normalised_otu_table.txt`;
         
         checkAndRunCommand("reformat_otu_table.py",  [{-i => "$results_dir/normalised_otu_table.txt",
-                                                       -t => "$processing_dir/rep_set_tax_assignments.txt",
+                                                       -t => "$processing_dir/OTU_numbered_tax_assignments.txt",
                                                        -o => "$results_dir/normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
+        
+        print "Summarizing by taxa.....\n";
+
+        checkAndRunCommand("summarize_taxa.py", [{-i => "$results_dir/normalised_otu_table.txt",
+                                                  -o => "$results_dir/breakdown_by_taxonomy/"}], DIE_ON_FAILURE); 
+         
+        $config_hash->{PIPELINE_STAGE} = "RAREFACTION";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
     }
     
+    if (($config_hash->{OTU_TABLES_ONLY}) && (! exists($pipeline_modifiers->{OTU_TABLES_ONLY}))) {
+    
+        print "APP configured to only create OTU tables. Stopping here.";
+        
+        return;
+    
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "RAREFACTION") {
+        
+        my $max_samples = max(map {$sample_counts{$_}} keys %sample_for_analysis_hash);
+        
+        my $global_rare_X = int($max_samples / 50) * 50;
+        my $global_rare_N = 50;
+        
+        # Do rarefaction in stages (10-100 in 10s), (100-1000 in 50s), 1000-5000 in 100s, 5000-10000 in 500s.
+        
+        print "Doing rarefaction stages....\n";
+        
+        my @rarefaction_stages = ({min => 10, max => 100, step => 10},
+                                  {min => 100, max => 1000, step => 50},
+                                  {min => 1000, max => 10000, step => 100},
+                                  {min => 10000, max => 50000, step => 500},
+                                  {min => 50000, max => 100000, step => 1000});
+    
+        foreach my $stage (@rarefaction_stages) {
+            if (($global_rare_X < $stage->{max})) {
+                checkAndRunCommand("multiple_rarefactions.py", [{-i => "$results_dir/non_normalised_otu_table.txt",
+                                                                 -o => "$processing_dir/rarefied_otu_tables/",
+                                                                 -m => $stage->{min},
+                                                                 -x => $global_rare_X,
+                                                                 -s => $stage->{step},
+                                                                 -n => $global_rare_N}], DIE_ON_FAILURE);
+                last;
+            } else {
+                checkAndRunCommand("multiple_rarefactions.py", [{-i => "$results_dir/non_normalised_otu_table.txt",
+                                                                 -o => "$processing_dir/rarefied_otu_tables/",
+                                                                 -m => $stage->{min},
+                                                                 -x => $stage->{max} - $stage->{step},
+                                                                 -s => $stage->{step},
+                                                                 -n => $global_rare_N}], DIE_ON_FAILURE);
+            }
+        }
+        
+        $config_hash->{PIPELINE_STAGE} = "ALPHA_DIVERSITY";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "ALPHA_DIVERSITY") {
+        
+        print "Calculating (non-phylogeny dependent) alpha diversity metrics....\n";
+        
+        my $methods_str = join(",", qw(chao1
+                                       chao1_confidence
+                                       observed_species
+                                       simpson
+                                       shannon
+                                       fisher_alpha));
+        
+        checkAndRunCommand("alpha_diversity.py", [{-i => "$processing_dir/rarefied_otu_tables/",
+                                                   -o => "$processing_dir/alpha_div/",
+                                                   -m => $methods_str}], DIE_ON_FAILURE);
+        
+        $config_hash->{PIPELINE_STAGE} = "ALPHA_DIVERSITY_COLLATION";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "ALPHA_DIVERSITY_COLLATION") {
+        
+        checkAndRunCommand("collate_alpha.py", [{-i => "$processing_dir/alpha_div/",
+                                                 -o => "$processing_dir/alpha_div_collated/"}], DIE_ON_FAILURE);
+     
+        foreach my $format (("png", "svg")) {
+            checkAndRunCommand("make_rarefaction_plots.py", [{-i => "$processing_dir/alpha_div_collated/",
+                                                              -m => "qiime_mapping.txt",
+                                                              -o => "$results_dir/alpha_diversity/",
+                                                              "--resolution" => 300,
+                                                              "--imagetype" => $format}], DIE_ON_FAILURE);
+        }
+        
+        $config_hash->{PIPELINE_STAGE} = "TREE_CREATION";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "TREE_CREATION") {
+    
+        my $imputed_file = $QIIME_imputed_file;
+        
+        print "Treeing non normalised data set...\n";
+        checkAndRunCommand("align_seqs.py", [{-i => "$processing_dir/cd_hit_otu/OTU_numbered",
+                                              -t => $imputed_file,
+                                              -p => 0.6,
+                                              -o => "$processing_dir/pynast_aligned"}], DIE_ON_FAILURE);
+                
+        checkAndRunCommand("filter_alignment.py", [{-i => "$processing_dir/pynast_aligned/OTU_numbered_aligned",
+                                                    -o => "$processing_dir"}], DIE_ON_FAILURE);
+    }    
 }
 
 ######################################################################
@@ -975,7 +1161,7 @@ sub find_centroid_table
 
     # read in the list of distance matricies
     run_R_cmd($R_instance, qq`library(foreign);`, $R_cmd_log_fh);
-    run_R_cmd($R_instance, qq`a<-list.files("$path", "*.txt");`, $R_cmd_log_fh);
+    run_R_cmd($R_instance, qq`a<-list.files("$path", "rarefaction_$norm_size` . '_[0-9]*.txt");', $R_cmd_log_fh);
 
     # work out how many there are and allocate an array
     run_R_cmd($R_instance, qq`len_a <- length(a);`, $R_cmd_log_fh);

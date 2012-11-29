@@ -120,20 +120,6 @@ sub setup_analysis_folder {
     my ($sample_array, $config_array) =
         parse_app_config_file($params_hash->{original_config_file});
     
-    my @samples_to_use;
-    open(my $fh, ">$output_dir/sample_exclusion.txt");
-    print {$fh} "#NAME\tREAD_COUNTS\tUSE\n";
-    foreach my $sample_count (@{$sample_array}) {
-        if (exists($sample_count->[4]) && ($sample_count->[4] == 0)) {
-            print {$fh} $sample_count->[0] . "\t??\t0\n";
-        } else {
-            print {$fh} $sample_count->[0] . "\t??\t1\n";
-            push @samples_to_use, $sample_count->[0];
-        }
-
-    }
-    close($fh);
-
     foreach my $param (keys %{$params_hash}) {
         if ($param eq 'original_config_file') {
             next;
@@ -141,8 +127,10 @@ sub setup_analysis_folder {
         push @{$config_array}, [uc($param), uc($params_hash->{$param})]
     }
     
+    my @sample_list = map {$_->[0]} @{$sample_array};
+    
     create_analysis_config_file("$output_dir/$global_analysis_config_filename",
-                                $config_array, \@samples_to_use);
+                                $config_array, \@sample_list);
     
     `cp app_$job_name.config $output_dir/app.config`;
     

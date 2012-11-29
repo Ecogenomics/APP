@@ -12,9 +12,11 @@ our @EXPORT=qw(
     create_unique_analysis_dir
     create_data_file_links
     parse_app_config_file
+    read_sample_exclusion
     create_analysis_config_file
     create_qiime_mapping_file
     convert_hash_to_array
+    get_read_counts_from_sample_counts
     get_read_counts_from_cd_hit_otu
     get_read_counts_from_OTU_table
 );
@@ -189,18 +191,47 @@ sub create_qiime_mapping_file {
     close($fh);
 }
 
+sub read_sample_exclusion {
+    my ($sample_exclusion_file) = @_;
+    open(my $fh, $sample_exclusion_file);
+    <$fh>; #burn headers
+    my %sample_use;
+    while (my $line = <$fh>) {
+        chomp $line;
+        my @splitline = split /\t/, $line;
+        $sample_use{$splitline[0]} = $splitline[$#splitline ];
+    }
+    close($fh);
+    return \%sample_use;
+}
+
+sub get_read_counts_from_sample_counts {
+    my ($sample_counts_file) = @_;
+    open(my $fh, $sample_counts_file);
+    <$fh>; #burn headers
+    my %sample_counts;
+    while (my $line = <$fh>) {
+        chomp $line;
+        my @splitline = split /\t/, $line;
+        $sample_counts{$splitline[0]} = $splitline[1];
+    }
+    close($fh);
+    return \%sample_counts;
+}
+
+
 sub get_read_counts_from_cd_hit_otu {
     my ($cd_hit_otu_file) = @_;
     open(my $fh, $cd_hit_otu_file);
     <$fh>; #burn headers
-    my @sample_counts;
+    my %sample_counts;
     while (my $line = <$fh>) {
         chomp $line;
         my @splitline = split /\t/, $line;
-        push @sample_counts, [$splitline[0], $splitline[$#splitline - 1]];
+        $sample_counts{$splitline[0]} = $splitline[$#splitline - 1];
     }
     close($fh);
-    return @sample_counts;
+    return \%sample_counts;
 };
 
 sub get_read_counts_from_OTU_table {
@@ -224,11 +255,11 @@ sub get_read_counts_from_OTU_table {
             }
         }
     }
-    my @sample_counts;
+    my %sample_counts;
     for (my $i = 0; $i < scalar @headers; $i++) {
-        push @sample_counts, [$headers[$i], $counts[$i]];
+        $sample_counts{$headers[$i]} = $counts[$i];
     }
-    return \@sample_counts;
+    return \%sample_counts;
 }
 
 sub convert_hash_to_array {
