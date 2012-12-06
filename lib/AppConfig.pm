@@ -123,7 +123,7 @@ our @EXPORT=qw(
     );
 
 # Version of this APP (update for each release candidate/tag)
-our $VERSION = '3.0.0';
+our $VERSION = '3.0.1';
 
 # Failure modes when executing a command
 use constant {
@@ -479,11 +479,6 @@ sub makeImageDirs
     `mkdir -p $global_image_dir`;
     $global_R_log_file = $global_image_dir."/R.log"; 
 }
-
-
-
-
-
 
 sub getReadCounts
 {

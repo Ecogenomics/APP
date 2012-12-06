@@ -136,7 +136,6 @@ if ($pipeline[0] =~ /^(\s*)CD_HIT_OTU(\s*)$/) {
 sub qiime_pipeline {
     
     my ($config_hash) = @_;
-    
     my $pipeline_modifiers = get_pipeline_modifiers($config_hash->{PIPELINE});
     
     my $GG_OTUS_FASTA = "/srv/whitlam/bio/db/gg/from_www.secongenome.com/2012_10/gg_12_10_otus/rep_set/97_otus.fasta";
@@ -159,7 +158,7 @@ sub qiime_pipeline {
     }
     
     my %sample_for_analysis_hash;
-    
+       
     my $need_to_reanalyse = 0;
     if (! -e "sample_exclusion.txt") {
         $config_hash->{SAMPLES_FOR_ANALYSIS} = $config_hash->{SAMPLES};
@@ -188,82 +187,120 @@ sub qiime_pipeline {
             }
         }
     }
-    
+        
     # If we are running for the first time, or if sample_exclusions.txt has been modified,
     # reset the pipeline. 
     
-    if ((! -e $global_qiime_mapping_filename) || ($need_to_reanalyse) || (! exists($config_hash->{PIPELINE_STAGE}))) {
+    if (($need_to_reanalyse) || (! exists($config_hash->{PIPELINE_STAGE}))) {
         $config_hash->{PIPELINE_STAGE} = "PREAMBLE";
-    }     
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+    }
         
     if ($config_hash->{PIPELINE_STAGE} eq "PREAMBLE") {
         
     # (Re)create the QIIME mapping file, taking sample_exclusions.txt into account.
         
-        my ($sample_array, $config_array) =
-            parse_app_config_file("app.config");
+          my @app_config_files = split /,/, $config_hash->{ORIGINAL_CONFIG_FILES};
         
         my %sample_to_analyse = map {$_ => 1} split /,/, $config_hash->{SAMPLES_FOR_ANALYSIS};
         
-        my $new_sample_array;
-        foreach my $sample_array_ptr (@{$sample_array}) {
-            if (exists $sample_to_analyse{$sample_array_ptr->[0]}) {
-                push @{$new_sample_array}, $sample_array_ptr;
+        if (! -e "split_libraries") {
+            mkdir "split_libraries";
+        }
+        
+       
+        foreach my $config_file (@app_config_files) {
+            my $config_filename = basename($config_file);
+            
+            my ($sample_array, $config_array) =
+                parse_app_config_files("original_app_configs/$config_filename");
+                     
+            my $new_sample_array;
+            foreach my $sample_array_ptr (@{$sample_array}) {
+                if (exists $sample_to_analyse{$sample_array_ptr->[0]}) {
+                    push @{$new_sample_array}, $sample_array_ptr;
+                }
+            }
+            
+            my $prefix;
+            if ($config_filename =~ /app_(.*).config$/) {
+                $prefix = $1;
+            } else {
+                die "Copied config file doesn't match name.\n";
+            }
+            
+            my $qiime_mapping_file = $prefix . "_qiime_mapping.txt";
+            create_qiime_mapping_file($qiime_mapping_file, $new_sample_array);
+            
+            my $params = [{-M => 1,
+                        -q => "raw_files/$prefix.qual",
+                        -f => "raw_files/$prefix.fasta",
+                        -d => '',
+                        -m => $qiime_mapping_file,
+                        -b => 'variable_length',
+                        -a => 2,
+                        -H => 10,
+                        -o => "split_libraries/$prefix",
+                        -l => $config_hash->{TRIM_LENGTH}}];
+            
+            if (exists($pipeline_modifiers->{STRICT_FILTERING})) {
+                
+                $params->{'-s'} = 25;
+                $params->{'-w'} = 10;
+                
+            } elsif (exists($pipeline_modifiers->{MEDIUM_FILTERING})) {
+                
+                $params->{'-s'} = 20;
+                $params->{'-w'} = 10;
+                
+            }
+            splitLibraries($params);
+        }
+        
+        
+        open(my $out_fa, ">split_libraries/out.fasta");
+        open(my $out_qual, ">split_libraries/out.qual");
+        
+        my $fasta_read_count = 0;
+        my $qual_read_count = 0;
+        opendir(my $dh, "split_libraries");        
+        while (my $dir = readdir($dh)) {
+            if (-d "split_libraries/$dir") {
+                if (! -e "split_libraries/$dir/seqs.fna") {
+                    next;
+                }
+                open(my $in_fa, "split_libraries/$dir/seqs.fna");
+                while (my $line = <$in_fa>) {
+                    if ($line =~ /(^>[^\s]*)_[0-9]*(\s.*$)/) {
+                        $fasta_read_count++;
+                        print {$out_fa} $1 . "_" . $fasta_read_count . $2 . "\n";
+                    } else {
+                        print {$out_fa} $line;
+                    }
+                }
+                close($in_fa);
+                open(my $in_qual, "split_libraries/$dir/seqs_filtered.qual");
+                while (my $line = <$in_qual>) {
+                    if ($line =~ /(^>[^\s]*)_[0-9]*(\s.*$)/) {
+                        $qual_read_count++;
+                        print {$out_qual} $1 . "_" . $qual_read_count . $2 . "\n";
+                    } else {
+                        print {$out_qual} $line; 
+                    }
+                }
+                close($in_qual);
             }
         }
         
-        create_qiime_mapping_file($global_qiime_mapping_filename, $new_sample_array);
-        
-        # Begin the pipeline...
-        
-        my $params = [{-M => 1,
-                    -q => 'raw_sequences.qual',
-                    -f => 'raw_sequences.fasta',
-                    -d => '',
-                    -m => $global_qiime_mapping_filename,
-                    -b => 'variable_length',
-                    -a => 2,
-                    -H => 10,
-                    -l => $config_hash->{TRIM_LENGTH}}];
-        
-        if (exists($pipeline_modifiers->{STRICT_FILTERING})) {
-            
-            $params = [{-M => 1,
-                        -q => 'raw_sequences.qual',
-                        -f => 'raw_sequences.fasta',
-                        -d => '',
-                        -m => $global_qiime_mapping_filename,
-                        -b => 'variable_length',
-                        -a => 2,
-                        -H => 10,
-                        -l => $config_hash->{TRIM_LENGTH},
-                        -s => 25,
-                        -w => 10}];
-            
-        } elsif (exists($pipeline_modifiers->{MEDIUM_FILTERING})) {
-            
-            $params = [{-M => 1,
-                        -q => 'raw_sequences.qual',
-                        -f => 'raw_sequences.fasta',
-                        -d => '',
-                        -m => $global_qiime_mapping_filename,
-                        -b => 'variable_length',
-                        -a => 2,
-                        -H => 10,
-                        -l => $config_hash->{TRIM_LENGTH},
-                        -s => 20,
-                        -w => 10}];
-        }
-        
-        splitLibraries($params);
-        
-        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        closedir($dh);
+        close($out_fa);
+        close($out_qual);
         
         if (-z 'seqs.fna') {
-          croak "ERROR: No sequences in seqs.fna (no sequences successfully demultiplexed after split_libraries.py).\n" .
-          "Check the config file that the barcode/primer sequences are correct.\n"
+            croak "ERROR: No sequences in seqs.fna (no sequences successfully demultiplexed after split_libraries.py).\n" .
+            "Check the config file that the barcode/primer sequences are correct.\n"
         }
-    
+        
         $config_hash->{PIPELINE_STAGE} = "UCLUST";
         
         create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
@@ -271,7 +308,7 @@ sub qiime_pipeline {
     
     if ($config_hash->{PIPELINE_STAGE} eq "UCLUST") {
     
-        my $params = [{'-uchime_ref' => 'seqs.fna'},
+        my $params = [{'-uchime_ref' => 'split_libraries/out.fasta'},
                  {'-db' => $QIIME_TAX_blast_file,
                   '-strand' => 'both',
                   '-threads' => 10,
@@ -430,44 +467,121 @@ sub qiime_pipeline {
     }
     
     if ($config_hash->{PIPELINE_STAGE} eq "NORMALISATION") {
-
-        use Data::Dumper;
         
-        print Dumper(\%sample_counts);
-        
-        my $min_samples = min(map {$sample_counts{$_}} keys %sample_for_analysis_hash);
-        
-        my $global_norm_sample_size = (int($min_samples / 50) - 1) * 50;
-        
-        if ($global_norm_sample_size <= 0) {
-            print "Unable to normalise, some samples have too few reads. Review " . $options->{'d'} . "/sample_exclusion.txt " .
-                  "and rerun app_run_analysis.pl -d " . $options->{'d'} . "\n\n";
-        }
-        
-        print "Correcting normalisation depth to $global_norm_sample_size sequences...\n";
-        
-        my $global_norm_num_reps = 1000;
-        
-        print "Normalizing non normalised table at $global_norm_sample_size sequences... [$global_norm_sample_size, $global_norm_num_reps]\n";
-                
-        my $params = [{-i => "$results_dir/non_normalised_otu_table.txt",
-                       -o => "$processing_dir/rare_tables/",
-                       -d => $global_norm_sample_size,
-                       -n => $global_norm_num_reps},
-                       ["--lineages_included"],
-                       ["--k"]];
-        
-        my $normalised_OTU_file = 
-            normalise_OTU_table($params, $processing_dir, $global_norm_sample_size,
-                                scalar keys %sample_counts);
+        normalise_otu_table($options, \%sample_for_analysis_hash, \%sample_counts,
+                            $results_dir, $processing_dir);
+         
+        $config_hash->{PIPELINE_STAGE} = "RAREFACTION";
             
-        `cp $normalised_OTU_file $results_dir/normalised_otu_table.txt`;
-        
-        checkAndRunCommand("reformat_otu_table.py",  [{-i => "$results_dir/normalised_otu_table.txt",
-                                                       -t => "$processing_dir/rep_set_tax_assignments.txt",
-                                                       -o => "$results_dir/normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
 
     }
+    
+    if (($config_hash->{OTU_TABLES_ONLY}) && (! exists($pipeline_modifiers->{OTU_TABLES_ONLY}))) {
+    
+        print "APP configured to only create OTU tables. Stopping here.";
+        
+        return;
+    
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "RAREFACTION") {
+        
+        my $max_samples = max(map {$sample_counts{$_}} keys %sample_for_analysis_hash);
+        
+        my $global_rare_X = int($max_samples / 50) * 50;
+        my $global_rare_N = 50;
+        
+        # Do rarefaction in stages (10-100 in 10s), (100-1000 in 50s), 1000-5000 in 100s, 5000-10000 in 500s.
+        
+        print "Doing rarefaction stages....\n";
+        
+        my @rarefaction_stages = ({min => 10, max => 100, step => 10},
+                                  {min => 100, max => 1000, step => 50},
+                                  {min => 1000, max => 10000, step => 100},
+                                  {min => 10000, max => 50000, step => 500},
+                                  {min => 50000, max => 100000, step => 1000});
+    
+        foreach my $stage (@rarefaction_stages) {
+            if (($global_rare_X < $stage->{max})) {
+                checkAndRunCommand("multiple_rarefactions.py", [{-i => "$results_dir/non_normalised_otu_table.txt",
+                                                                 -o => "$processing_dir/rarefied_otu_tables/",
+                                                                 -m => $stage->{min},
+                                                                 -x => $global_rare_X,
+                                                                 -s => $stage->{step},
+                                                                 -n => $global_rare_N}], DIE_ON_FAILURE);
+                last;
+            } else {
+                checkAndRunCommand("multiple_rarefactions.py", [{-i => "$results_dir/non_normalised_otu_table.txt",
+                                                                 -o => "$processing_dir/rarefied_otu_tables/",
+                                                                 -m => $stage->{min},
+                                                                 -x => $stage->{max} - $stage->{step},
+                                                                 -s => $stage->{step},
+                                                                 -n => $global_rare_N}], DIE_ON_FAILURE);
+            }
+        }
+        
+        $config_hash->{PIPELINE_STAGE} = "ALPHA_DIVERSITY";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "ALPHA_DIVERSITY") {
+        
+        print "Calculating (non-phylogeny dependent) alpha diversity metrics....\n";
+        
+        my $methods_str = join(",", qw(chao1
+                                       chao1_confidence
+                                       observed_species
+                                       simpson
+                                       shannon
+                                       fisher_alpha));
+        
+        checkAndRunCommand("alpha_diversity.py", [{-i => "$processing_dir/rarefied_otu_tables/",
+                                                   -o => "$processing_dir/alpha_div/",
+                                                   -m => $methods_str}], DIE_ON_FAILURE);
+        
+        $config_hash->{PIPELINE_STAGE} = "ALPHA_DIVERSITY_COLLATION";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "ALPHA_DIVERSITY_COLLATION") {
+        
+        checkAndRunCommand("collate_alpha.py", [{-i => "$processing_dir/alpha_div/",
+                                                 -o => "$processing_dir/alpha_div_collated/"}], DIE_ON_FAILURE);
+     
+        `cat *qiime_mapping.txt > qiime_mapping.txt`;
+     
+        foreach my $format (("png", "svg")) {
+            checkAndRunCommand("make_rarefaction_plots.py", [{-i => "$processing_dir/alpha_div_collated/",
+                                                              -m => "qiime_mapping.txt",
+                                                              -o => "$results_dir/alpha_diversity/",
+                                                              "--resolution" => 300,
+                                                              "--imagetype" => $format}], DIE_ON_FAILURE);
+        }
+        
+        $config_hash->{PIPELINE_STAGE} = "TREE_CREATION";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "TREE_CREATION") {
+    
+        my $imputed_file = $QIIME_imputed_file;
+        
+        print "Treeing non normalised data set...\n";
+        checkAndRunCommand("align_seqs.py", [{-i => "$processing_dir/cd_hit_otu/OTU_numbered",
+                                              -t => $imputed_file,
+                                              -p => 0.6,
+                                              -o => "$processing_dir/pynast_aligned"}], DIE_ON_FAILURE);
+                
+        checkAndRunCommand("filter_alignment.py", [{-i => "$processing_dir/pynast_aligned/OTU_numbered_aligned",
+                                                    -o => "$processing_dir"}], DIE_ON_FAILURE);
+    }    
     
 }
 
@@ -532,49 +646,106 @@ sub cd_hit_otu_pipeline {
             }
         }
     }
-    
+        
     # If we are running for the first time, or if sample_exclusions.txt has been modified,
     # reset the pipeline. 
     
-    if ((! -e $global_qiime_mapping_filename) || ($need_to_reanalyse) || (! exists($config_hash->{PIPELINE_STAGE}))) {
+    if (($need_to_reanalyse) || (! exists($config_hash->{PIPELINE_STAGE}))) {
         $config_hash->{PIPELINE_STAGE} = "PREAMBLE";
-    } 
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+    }
     
     if ($config_hash->{PIPELINE_STAGE} eq "PREAMBLE") {
         
     # (Re)create the QIIME mapping file, taking sample_exclusions.txt into account.
         
-        my ($sample_array, $config_array) =
-            parse_app_config_file("app.config");
+        my @app_config_files = split /,/, $config_hash->{ORIGINAL_CONFIG_FILES};
         
         my %sample_to_analyse = map {$_ => 1} split /,/, $config_hash->{SAMPLES_FOR_ANALYSIS};
         
-        my $new_sample_array;
-        foreach my $sample_array_ptr (@{$sample_array}) {
-            if (exists $sample_to_analyse{$sample_array_ptr->[0]}) {
-                push @{$new_sample_array}, $sample_array_ptr;
+        if (! -e "split_libraries") {
+            mkdir "split_libraries";
+        }
+        
+       
+        foreach my $config_file (@app_config_files) {
+            my $config_filename = basename($config_file);
+            
+            my ($sample_array, $config_array) =
+                parse_app_config_files("original_app_configs/$config_filename");
+                     
+            my $new_sample_array;
+            foreach my $sample_array_ptr (@{$sample_array}) {
+                if (exists $sample_to_analyse{$sample_array_ptr->[0]}) {
+                    push @{$new_sample_array}, $sample_array_ptr;
+                }
+            }
+            
+            my $prefix;
+            if ($config_filename =~ /app_(.*).config$/) {
+                $prefix = $1;
+            } else {
+                die "Copied config file doesn't match name.\n";
+            }
+            
+            my $qiime_mapping_file = $prefix . "_qiime_mapping.txt";
+            create_qiime_mapping_file($qiime_mapping_file, $new_sample_array);
+            
+            my $params = [{-M => 1,
+                           -q => "raw_files/$prefix.qual",
+                           -f => "raw_files/$prefix.fasta",
+                           -d => '',
+                           -m => $qiime_mapping_file,
+                           -b => 'variable_length',
+                           -a => 20,
+                           -H => 40,
+                           -k => '',
+                           -o => "split_libraries/$prefix",
+                           -s => 20,
+                           -l => $config_hash->{TRIM_LENGTH},
+                           -t => ''}];
+            
+            splitLibraries($params);
+        }
+        
+        
+        open(my $out_fa, ">split_libraries/out.fasta");
+        open(my $out_qual, ">split_libraries/out.qual");
+        
+        my $fasta_read_count = 0;
+        my $qual_read_count = 0;
+        opendir(my $dh, "split_libraries");        
+        while (my $dir = readdir($dh)) {
+            if (-d "split_libraries/$dir") {
+                if (! -e "split_libraries/$dir/seqs.fna") {
+                    next;
+                }
+                open(my $in_fa, "split_libraries/$dir/seqs.fna");
+                while (my $line = <$in_fa>) {
+                    if ($line =~ /(^>[^\s]*)_[0-9]*(\s.*$)/) {
+                        $fasta_read_count++;
+                        print {$out_fa} $1 . "_" . $fasta_read_count . $2 . "\n";
+                    } else {
+                        print {$out_fa} $line;
+                    }
+                }
+                close($in_fa);
+                open(my $in_qual, "split_libraries/$dir/seqs_filtered.qual");
+                while (my $line = <$in_qual>) {
+                    if ($line =~ /(^>[^\s]*)_[0-9]*(\s.*$)/) {
+                        $qual_read_count++;
+                        print {$out_qual} $1 . "_" . $qual_read_count . $2 . "\n";
+                    } else {
+                        print {$out_qual} $line; 
+                    }
+                }
+                close($in_qual);
             }
         }
         
-        create_qiime_mapping_file($global_qiime_mapping_filename, $new_sample_array);
-        
-        # Begin the pipeline...
-        
-        my $params = [{-M => 1,
-                    -q => 'raw_sequences.qual',
-                    -f => 'raw_sequences.fasta',
-                    -d => '',
-                    -m => $global_qiime_mapping_filename,
-                    -b => 'variable_length',
-                    -a => 20,
-                    -H => 40,
-                    -k => '',
-                    -s => 20,
-                    -l => $config_hash->{TRIM_LENGTH},
-                    -t => ''}];
-        
-        
-        splitLibraries($params);
+        closedir($dh);
+        close($out_fa);
+        close($out_qual);
         
         if (-z 'seqs.fna') {
             croak "ERROR: No sequences in seqs.fna (no sequences successfully demultiplexed after split_libraries.py).\n" .
@@ -588,9 +759,9 @@ sub cd_hit_otu_pipeline {
     
     if ($config_hash->{PIPELINE_STAGE} eq "TRIM_SEQS") {
     
-        my $params = [{-f => 'seqs.fna',
-                    -q => 'seqs_filtered.qual',
-                    -b => $config_hash->{TRIM_LENGTH}}];
+        my $params = [{-f => 'split_libraries/out.fasta',
+                       -q => 'split_libraries/out.qual',
+                       -b => $config_hash->{TRIM_LENGTH}}];
         
         truncateFastaAndQual($params);
         
@@ -605,7 +776,7 @@ sub cd_hit_otu_pipeline {
     
     }
     
-    my $fasta_output_file = 'seqs_filtered.fasta';
+    my $fasta_output_file = 'out_filtered.fasta';
     
     if ($config_hash->{PIPELINE_STAGE} eq "ACACIA") {
     
@@ -613,7 +784,7 @@ sub cd_hit_otu_pipeline {
         
         if (! exists($pipeline_modifiers->{NO_ACACIA})) {
         
-            $acacia_config_hash{'FASTA_LOCATION'} = 'seqs_filtered.fasta';
+            $acacia_config_hash{'FASTA_LOCATION'} = 'out_filtered.fasta';
             
             $acacia_config_hash{TRIM_TO_LENGTH} = $config_hash->{TRIM_LENGTH};
             
@@ -770,43 +941,9 @@ sub cd_hit_otu_pipeline {
     }
     
     if ($config_hash->{PIPELINE_STAGE} eq "NORMALISATION") {
-                  
-        my $min_samples = min(map {$sample_counts{$_}} keys %sample_for_analysis_hash);
         
-        my $global_norm_sample_size = (int($min_samples / 50) - 1) * 50;
-        
-        if ($global_norm_sample_size <= 0) {
-            print "Unable to normalise, some samples have too few reads. Review " . $options->{'d'} . "/sample_exclusion.txt " .
-                  "and rerun app_run_analysis.pl -d " . $options->{'d'} . "\n\n";
-        }
-        
-        print "Correcting normalisation depth to $global_norm_sample_size sequences...\n";
-        
-        my $global_norm_num_reps = 1000;
-        
-        print "Normalizing non normalised table at $global_norm_sample_size sequences... [$global_norm_sample_size, $global_norm_num_reps]\n";
-        
-        my $params = [{-i => "$results_dir/non_normalised_otu_table.txt",
-                    -o => "$processing_dir/rare_tables/",
-                    -d => $global_norm_sample_size,
-                    -n => $global_norm_num_reps},
-                    ["--lineages_included"],
-                    ["--k"]];
-        
-        my $normalised_OTU_file = 
-            normalise_OTU_table($params, $processing_dir, $global_norm_sample_size,
-                                scalar keys %sample_for_analysis_hash);
-            
-        `cp $normalised_OTU_file $results_dir/normalised_otu_table.txt`;
-        
-        checkAndRunCommand("reformat_otu_table.py",  [{-i => "$results_dir/normalised_otu_table.txt",
-                                                       -t => "$processing_dir/OTU_numbered_tax_assignments.txt",
-                                                       -o => "$results_dir/normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
-        
-        print "Summarizing by taxa.....\n";
-
-        checkAndRunCommand("summarize_taxa.py", [{-i => "$results_dir/normalised_otu_table.txt",
-                                                  -o => "$results_dir/breakdown_by_taxonomy/"}], DIE_ON_FAILURE); 
+        normalise_otu_table($options, \%sample_for_analysis_hash, \%sample_counts,
+                            $results_dir, $processing_dir);
          
         $config_hash->{PIPELINE_STAGE} = "RAREFACTION";
             
@@ -889,6 +1026,8 @@ sub cd_hit_otu_pipeline {
         checkAndRunCommand("collate_alpha.py", [{-i => "$processing_dir/alpha_div/",
                                                  -o => "$processing_dir/alpha_div_collated/"}], DIE_ON_FAILURE);
      
+        `cat *qiime_mapping.txt > qiime_mapping.txt`;
+        
         foreach my $format (("png", "svg")) {
             checkAndRunCommand("make_rarefaction_plots.py", [{-i => "$processing_dir/alpha_div_collated/",
                                                               -m => "qiime_mapping.txt",
@@ -990,23 +1129,6 @@ sub run_acacia
     
 }
 
-
-sub normalise_OTU_table {
-    my ($params, $processing_dir, $global_norm_sample_size, $num_samples) = @_;
-    
-    checkAndRunCommand("multiple_rarefactions_even_depth.py", $params, DIE_ON_FAILURE);
-        
-    print "Calculating centroid subsampled table...\n";
-    my $centroid_index = find_centroid_table("$processing_dir/rare_tables/",
-                                             $global_norm_sample_size,
-                                             $num_samples,
-                                             "$processing_dir/$tn_dist_file",
-                                             "$processing_dir/$tn_log_file",
-                                             "$processing_dir/$tn_R_log_file");
-    
-    return "$processing_dir/rare_tables/rarefaction_$global_norm_sample_size"."_$centroid_index".".txt";
-
-}
 
 ###############################################################################
 # Subs
@@ -1127,118 +1249,6 @@ sub create_QIIME_OTU_from_CDHIT {
     close($out_fh);
     return \@sample_counts;
     
-}
-
-sub run_R_cmd
-{
-    #-----
-    # Wrapper for running R commands
-    #
-    my ($R_instance, $cmd, $log_fh) = @_;
-    if ($log_fh) {
-        print {$log_fh} $cmd, "\n";
-    }
-    $R_instance->run($cmd);
-}
-
-sub find_centroid_table
-{
-    #-----
-    # Find a representative set of $global_norm_sample_size sequences (do this in RRRRRR...)
-    #
-    my($path, $norm_size, $num_samples, $dist_file, $log_file, $R_cmd_log) = @_;
-
-    my $R_instance = Statistics::R->new();
-    
-    open (my $R_cmd_log_fh, ">", $R_cmd_log)
-        or warn("Unable to open $R_cmd_log for logging R commands. Proceeding without logging.");
-
-    print "Calculating centroid OTU table from tables in $path...\n";
-
-    $R_instance->start();
-
-    my $sampl_p1 = $num_samples + 1;
-
-    # read in the list of distance matricies
-    run_R_cmd($R_instance, qq`library(foreign);`, $R_cmd_log_fh);
-    run_R_cmd($R_instance, qq`a<-list.files("$path", "rarefaction_$norm_size` . '_[0-9]*.txt");', $R_cmd_log_fh);
-
-    # work out how many there are and allocate an array
-    run_R_cmd($R_instance, qq`len_a <- length(a);`, $R_cmd_log_fh);
-    run_R_cmd($R_instance, qq`big_frame <- array(0,dim=c($num_samples,$num_samples,len_a));`, $R_cmd_log_fh);
-
-    print "  --start loading data...\n";
-
-    # load each file individually into a big frame
-    my $r_str = "for (i in c(1:len_a)) { j <- i - 1; name <- paste(\"$path\",\"rarefaction_$norm_size\",\"_\",j,\".txt\",sep=\"\"); u<-read.table(name,sep=\"\\t\",row.names=1); u[,$sampl_p1]<-NULL; big_frame[,,i]<-as.matrix(dist(t(u), upper=TRUE, diag=TRUE)); i<-i+1; }";
-    run_R_cmd($R_instance, $r_str, $R_cmd_log_fh);
-
-    print "  --data loaded, calculating centroid...\n";
-
-    # find the average matrix
-    run_R_cmd($R_instance, qq`ave <- big_frame[,,1];`, $R_cmd_log_fh);
-    run_R_cmd($R_instance, qq`for (i in c(2:len_a)) { ave <- ave + big_frame[,,i]; }`, $R_cmd_log_fh);
-    run_R_cmd($R_instance, qq`ave <- ave/len_a;`, $R_cmd_log_fh);
-
-    print "  --calculating distances of tables to centroid...\n";
-
-    # find the euclidean distance of each matrix from the average
-    run_R_cmd($R_instance, qq`dist<-array(0,dim=c(len_a));`, $R_cmd_log_fh);
-    run_R_cmd($R_instance, qq`for (i in c(1:len_a)) { dist[i] <- sqrt(sum(big_frame[,,i]-ave)^2); }`, $R_cmd_log_fh);
-
-    # find the min value
-    run_R_cmd($R_instance, qq`min_index <- which.min(dist);`, $R_cmd_log_fh);
-    my $centroid_otu_index = $R_instance->get('min_index');
-    # R indexes from 0
-    $centroid_otu_index--;
-    print "  --table: $centroid_otu_index is the centroid table\n";
-
-    # make stats on the distances
-    # and log what we did
-    open my $log_fh, ">", $log_file or die "Could not open log file: $log_file : $!\n";
-    run_R_cmd($R_instance, qq`max_dist <- max(dist);`, $R_cmd_log_fh);
-    run_R_cmd($R_instance, qq`min_dist <- min(dist);`, $R_cmd_log_fh);
-    run_R_cmd($R_instance, qq`range_dist <- max_dist - min_dist;`, $R_cmd_log_fh);
-    run_R_cmd($R_instance, qq`mean_dist <- mean(dist);`, $R_cmd_log_fh);
-    run_R_cmd($R_instance, qq`median_dist <- median(dist);`, $R_cmd_log_fh);
-
-    print $log_fh "---------------------------------------------------\n";
-    print $log_fh "  Centroid OTU table based normalised statistics\n";
-    print $log_fh "---------------------------------------------------\n";
-    print $log_fh "Max dist:\t".$R_instance->get('max_dist')."\n";
-    print $log_fh "Min dist:\t".$R_instance->get('min_dist')."\n";
-    print $log_fh "Range:\t".$R_instance->get('range_dist')."\n";
-    print $log_fh "Mean:\t".$R_instance->get('mean_dist')."\n";
-    print $log_fh "Median:\t".$R_instance->get('median_dist')."\n";
-
-    if(2 < $num_samples)
-    {
-        run_R_cmd($R_instance, qq`library(permute);`, $R_cmd_log_fh);
-        run_R_cmd($R_instance, qq`library(vegan);`, $R_cmd_log_fh);
-        run_R_cmd($R_instance, qq`mantel.otu <- mantel(ave,big_frame[,,min_index]);`, $R_cmd_log_fh);
-        run_R_cmd($R_instance, qq`m_stat <- mantel.otu\$statistic;`, $R_cmd_log_fh);
-        run_R_cmd($R_instance, qq`m_sig <- mantel.otu\$signif;`, $R_cmd_log_fh);
-        print $log_fh "Mantel P stat:\t".$R_instance->get('m_sig')."\n";
-        print $log_fh "Mantel R stat:\t".$R_instance->get('m_stat')."\n";
-    }
-    else
-    {
-        print "Too few samples to perform a mantel test.\n";
-    }
-    close $log_fh;
-
-    # print all the distances to a file so we can make purdy pictures from them later
-    open my $dist_fh, ">", $dist_file or die "Could not open distance file: $dist_file : $!\n";
-    my $num_tables = $R_instance->get('len_a');
-    foreach my $counter (1..$num_tables)
-    {
-        print $dist_fh $R_instance->get("dist[$counter]")."\n"
-    }
-    close $dist_fh;
-
-    close($R_cmd_log_fh);
-    # let the user know the result    
-    return $centroid_otu_index;
 }
 
 sub checkParams {

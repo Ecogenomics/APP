@@ -58,20 +58,33 @@ printAtStart();
 # Setup the analysis folder
 my $params_hash = {};
 
-if (! -e $options->{'c'}) {
-    die "Unable to find config file: " . $options->{'c'} . "\n";
-}
+my @config_files = split /,/, $options->{'c'};
 
-my $job_name = basename($options->{'c'});
+my @jobs;
 
-if ($job_name =~ /app_(.*).config$/) {
-    $job_name = $1;
-} else {
-    croak "The app config file needs to be of the form app_<prefix>.config, ".
-        "where <prefix> can be chosen by the user.\n" ;
-}
+foreach my $config_file (@config_files) {
+    if (! -e $config_file) {
+        die "Unable to find config file: " . $config_file . "\n";
+    }
     
-my @argv_to_app_params = (['c', 'original_config_file'],
+    my $job_name = basename($config_file);
+    my $job_dir = dirname($config_file);
+    if (! $job_dir) {
+        $job_dir = ".";
+    }
+
+    if ($job_name =~ /app_(.*).config$/) {
+        $job_name = $1;
+    } else {
+        croak "The app config file needs to be of the form app_<prefix>.config, ".
+              "where <prefix> can be chosen by the user.\n" .
+              "Offending file: $config_file.";
+    }
+    push @jobs, [$job_dir, $job_name];
+    
+}
+
+my @argv_to_app_params = (['c', 'original_config_files'],
                           ['l', 'trim_length'],
                           ['o', 'output_folder'],
                           ['acacia_conf', 'acacia_conf_file'],
@@ -91,9 +104,7 @@ foreach my $arg_pair (@argv_to_app_params) {
     }
 }
 
-use Data::Dumper;
-
-my $output_dir = setup_analysis_folder($job_name, $params_hash);
+my $output_dir = setup_analysis_folder(\@jobs, $params_hash);
 print "\nAnalysis folder created. Use the following command to start the analysis:\n";
 print "\tapp_run_analysis.pl -d $output_dir\n\n";
 
@@ -103,28 +114,30 @@ print "\tapp_run_analysis.pl -d $output_dir\n\n";
 ########################
 
 ################################################################################
-# Subroutine: setup_analysis_folder($job_name, $params_hash)
+# Subroutine: setup_analysis_folder($job_name_array, $params_hash)
 # 
 # 
 #
 ################################################################################
 
 sub setup_analysis_folder {
-    my ($job_name, $params_hash) = @_;
+    my ($job_name_array, $params_hash) = @_;
     
     my $output_dir =
         create_unique_analysis_dir($params_hash->{output_folder});
     
-    create_data_file_links($output_dir, $job_name);
+    create_data_file_links($output_dir, $job_name_array);
     
     my ($sample_array, $config_array) =
-        parse_app_config_file($params_hash->{original_config_file});
+        parse_app_config_files($params_hash->{original_config_files});
     
     foreach my $param (keys %{$params_hash}) {
-        if ($param eq 'original_config_file') {
-            next;
+        if ($param eq 'original_config_files') {
+            push @{$config_array}, [uc($param), $params_hash->{$param}]
+        } else {
+            push @{$config_array}, [uc($param), uc($params_hash->{$param})]
         }
-        push @{$config_array}, [uc($param), uc($params_hash->{$param})]
+      
     }
     
     my @sample_list = map {$_->[0]} @{$sample_array};
@@ -132,7 +145,13 @@ sub setup_analysis_folder {
     create_analysis_config_file("$output_dir/$global_analysis_config_filename",
                                 $config_array, \@sample_list);
     
-    `cp app_$job_name.config $output_dir/app.config`;
+    mkdir "$output_dir/original_app_configs/"; 
+    
+    foreach my $job (@{$job_name_array}) {
+        my $cmd = "cp " . $job->[0] . "/app_" . $job->[1] .
+            ".config $output_dir/original_app_configs/app_" . $job->[1] . ".config";
+        `$cmd`;
+    }
     
     return $output_dir;
     
