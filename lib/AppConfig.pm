@@ -222,15 +222,15 @@ our $global_barcode_length = "variable_length";
 #
 # Some programs make special output files. Store these filenames here
 #
-our $QIIME_GG_TAX_ROOT = "/srv/whitlam/bio/db/gg/qiime_default/gg_otus_4feb2011";
+our $QIIME_GG_TAX_ROOT = "/srv/whitlam/bio/db/gg/from_www.secongenome.com/current";
 
 our $QIIME_map_file = "qiime_mapping.txt";
 our $QIIME_split_out = "seqs.fna";
 our $QIIME_split_out_qual = "seqs_filtered.qual";
-our $QIIME_TAX_tax_file = "$QIIME_GG_TAX_ROOT/taxonomies/greengenes_tax.txt";
-our $QIIME_TAX_blast_file = "$QIIME_GG_TAX_ROOT/rep_set/gg_99_otus_4feb2011.fasta";
-our $QIIME_TAX_aligned_blast_file = "$QIIME_GG_TAX_ROOT/rep_set/gg_99_otus_4feb2011_aligned.fasta";
-our $QIIME_imputed_file = "/srv/whitlam/bio/db/gg/qiime_default/core_set_aligned.fasta.imputed";
+our $QIIME_TAX_tax_file = "$QIIME_GG_TAX_ROOT/gg_12_10_taxonomy.txt";
+our $QIIME_TAX_blast_file = "$QIIME_GG_TAX_ROOT/gg_12_10_otus/rep_set/99_otus.fasta";
+our $QIIME_TAX_aligned_blast_file = "$QIIME_GG_TAX_ROOT/gg_12_10_otus/rep_set/99_otus.fasta";
+our $QIIME_imputed_file = "$QIIME_GG_TAX_ROOT/gg_12_10_aligned.fasta";
 
 #SILVA DBs
 our $SILVA_TAX_tax_file = "/srv/whitlam/bio/db/Silva/QIIME_files/taxonomy_mapping/Silva_taxa_mapping_104set_97_otus.txt";

@@ -90,8 +90,9 @@ my $options = checkParams();
 
 chdir($options->{'d'}) or die "No such directory: " . $options->{'d'} . "\n";
 printAtStart();
-#qiime_standard_pipeline();
+
 my $config_hash;
+my $extra_param_hash = {};
 
 open(my $fh, "config.txt");
 while (my $line = <$fh>) {
@@ -106,12 +107,18 @@ if (! defined ($config_hash->{PIPELINE})) {
     $config_hash->{PIPELINE} = 'CD_HIT_OTU';
 }
 
+if (defined ($config_hash->{DB})) {
+    setup_db_paths($extra_param_hash, $config_hash->{DB});
+} else {
+    setup_db_paths($extra_param_hash);
+}
+
 my @pipeline = split /,/, $config_hash->{PIPELINE};
 
 if ($pipeline[0] =~ /^(\s*)CD_HIT_OTU(\s*)$/) {
-    cd_hit_otu_pipeline($config_hash);
+    cd_hit_otu_pipeline($config_hash, $extra_param_hash);
 } elsif ($pipeline[0] =~ /^(\s*)QIIME(\s*)$/) {
-    qiime_pipeline($config_hash);
+    qiime_pipeline($config_hash, $extra_param_hash);
 } else {
     print "Unknown pipeline: " . $pipeline[0] . "\n";
 }
@@ -135,8 +142,8 @@ if ($pipeline[0] =~ /^(\s*)CD_HIT_OTU(\s*)$/) {
 
 sub qiime_pipeline {
     
-    my ($config_hash) = @_;
-    my $pipeline_modifiers = get_pipeline_modifiers($config_hash->{PIPELINE});
+    my ($config_hash, $extra_param_hash) = @_;
+    my $pipeline_modifiers = get_parameter_modifiers($config_hash->{PIPELINE});
     
     my $GG_OTUS_FASTA = "/srv/whitlam/bio/db/gg/from_www.secongenome.com/2012_10/gg_12_10_otus/rep_set/97_otus.fasta";
     
@@ -385,6 +392,8 @@ sub qiime_pipeline {
                                                 -f => $fasta_output_file,
                                                 -o => "$processing_dir/rep_set.fa"}], DIE_ON_FAILURE);
         
+        symlink("$results_dir/rep_set.fa", "$processing_dir/rep_set.fa");
+        
         $config_hash->{PIPELINE_STAGE} = "ASSIGN_TAXONOMY";
            
         create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
@@ -392,14 +401,11 @@ sub qiime_pipeline {
  
     if ($config_hash->{PIPELINE_STAGE} eq "ASSIGN_TAXONOMY") {
     
-        my $TAX_tax_file = $QIIME_TAX_tax_file;
-        my $TAX_blast_file = $QIIME_TAX_blast_file;
-        my $TAX_aligned_blast_file = $QIIME_TAX_aligned_blast_file;
         my $imputed_file = $QIIME_imputed_file;
         
         checkAndRunCommand("assign_taxonomy.py", [{-i => "$processing_dir/rep_set.fa",
-                                                   -t => $TAX_tax_file,
-                                                   -b => $TAX_blast_file,
+                                                   -t => $extra_param_hash->{DB}->{TAXONOMIES},
+                                                   -b => $extra_param_hash->{DB}->{OTUS},
                                                    -m => "blast",
                                                    -a => 10,
                                                    -e => 0.001,
@@ -594,10 +600,8 @@ sub qiime_pipeline {
 
 sub cd_hit_otu_pipeline {
     
-    my ($config_hash) = @_;
-    my $pipeline_modifiers = get_pipeline_modifiers($config_hash->{PIPELINE});
-    
-    my $GG_OTUS_FASTA = "/srv/whitlam/bio/db/gg/from_www.secongenome.com/2012_10/gg_12_10_otus/rep_set/97_otus.fasta";
+    my ($config_hash, $extra_param_hash) = @_;
+    my $pipeline_modifiers = get_parameter_modifiers($config_hash->{PIPELINE});
     
     my $processing_dir = 'processing';
     my $results_dir = 'results';
@@ -830,6 +834,8 @@ sub cd_hit_otu_pipeline {
         my $rep_set_otu_array =
             reformat_CDHIT_repset("$processing_dir/cd_hit_otu/OTU",
                                   "$processing_dir/cd_hit_otu/OTU_numbered");
+        
+        symlink("$results_dir/rep_set.fa","$processing_dir/cd_hit_otu/OTU_numbered");
        
         $config_hash->{PIPELINE_STAGE} = "ASSIGN_TAXONOMY";
             
@@ -847,15 +853,17 @@ sub cd_hit_otu_pipeline {
         my $TAX_aligned_blast_file = $QIIME_TAX_aligned_blast_file;
         my $imputed_file = $QIIME_imputed_file;
         
+        print Dumper($extra_param_hash);
+        
         #print "Assign taxonomy method: $assign_taxonomy_method\n";
         #if ($assign_taxonomy_method eq 'blast') {
             checkAndRunCommand("assign_taxonomy.py", [{-i => "$processing_dir/cd_hit_otu/OTU_numbered",
-                                                        -t => $TAX_tax_file,
-                                                        -b => $TAX_blast_file,
-                                                        -m => "blast",
-                                                        -a => 10,
-                                                        -e => 0.001,
-                                                        -o => $processing_dir}], DIE_ON_FAILURE);
+                                                       -t => $extra_param_hash->{DB}->{TAXONOMIES},
+                                                       -b => $extra_param_hash->{DB}->{OTUS},
+                                                       -m => "blast",
+                                                       -a => 10,
+                                                       -e => 0.001,
+                                                       -o => $processing_dir}], DIE_ON_FAILURE);
         #} elsif ($assign_taxonomy_method eq 'bwasw') {
         #    checkAndRunCommand("assign_taxonomy.py", [{-i => "$processing_dir/cd_hit_otu/OTU_numbered",
         #                                                -t => $TAX_tax_file,
@@ -891,6 +899,8 @@ sub cd_hit_otu_pipeline {
                                                        -o => "$results_dir/non_normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
     
         my $otu_sample_counts = get_read_counts_from_cd_hit_otu("$processing_dir/cd_hit_otu/OTU.nr2nd.clstr.sample.txt");
+        
+        print Dumper($otu_sample_counts);
             
         # If this is the first run through, create a file to record the sample_counts.
         if (! -e "sample_counts.txt") {
@@ -944,6 +954,11 @@ sub cd_hit_otu_pipeline {
         
         normalise_otu_table($options, \%sample_for_analysis_hash, \%sample_counts,
                             $results_dir, $processing_dir);
+        
+        
+        # HERE!!!!!!!!!!!!!
+        checkAndRunCommand("summarize_taxa.py", [{-i => "$results_dir/normalised_otu_table.txt",
+                                                  -o => "$results_dir/breakdown_by_taxonomy/"}], DIE_ON_FAILURE);
          
         $config_hash->{PIPELINE_STAGE} = "RAREFACTION";
             
@@ -1133,18 +1148,6 @@ sub run_acacia
 ###############################################################################
 # Subs
 ###############################################################################
-
-sub get_pipeline_modifiers {
-    my %pipeline_modifiers;
-    my ($pipeline_string) = @_;
-    my @splitline = split /,/, $pipeline_string;
-    for (my $i = 1; $i < scalar @splitline; $i++) {
-        if ($splitline[$i] =~ /^(\s*)(\S*)(\s*)$/) {
-            $pipeline_modifiers{$2}++;
-        }
-    }
-    return \%pipeline_modifiers;
-}
 
 sub updateAcaciaConfigHash {
     my ($config_file) = @_;

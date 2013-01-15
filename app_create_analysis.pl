@@ -180,7 +180,7 @@ sub checkParams {
     #
     exec("pod2usage $0") if $options{'help'};
 
-    # Compulsosy items
+    # Compulsory items
     if(!exists $options{'c'} ) { print "**ERROR: you MUST give a config file\n"; exec("pod2usage $0"); }
     #if(!exists $options{''} ) { print "**ERROR: \n"; exec("pod2usage $0"); }
 

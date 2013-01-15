@@ -16,11 +16,13 @@ our @EXPORT=qw(
     read_sample_exclusion
     create_analysis_config_file
     create_qiime_mapping_file
+    get_parameter_modifiers
     convert_hash_to_array
     get_read_counts_from_sample_counts
     get_read_counts_from_cd_hit_otu
     get_read_counts_from_OTU_table
     normalise_otu_table
+    setup_db_paths
 );
 
 our %known_config_options = (
@@ -29,7 +31,8 @@ our %known_config_options = (
     MUL_RARE_X => [],
     MUL_RARE_S => [],
     MUL_RARE_N => [],
-    PIPELINE => []
+    PIPELINE => [],
+    DB => ['SILVA','GG']
 );
 
 ################################################################################
@@ -217,6 +220,45 @@ sub create_qiime_mapping_file {
         print {$fh} join("\t", @{$sample_array_ptr}), "\n";
     }
     close($fh);
+}
+
+
+sub get_parameter_modifiers {
+    my %parameter_modifiers;
+    my ($parameter_string) = @_;
+    my @splitline = split /,/, $parameter_string;
+    for (my $i = 1; $i < scalar @splitline; $i++) {
+        if ($splitline[$i] =~ /^(\s*)(\S*)(\s*)$/) {
+            $parameter_modifiers{$2}++;
+        }
+    }
+    return \%parameter_modifiers;
+}
+
+
+sub setup_db_paths {
+    my ($extra_param_hash, $db_string) = @_;
+    if (! defined($db_string)) {
+        $db_string = "GG";
+    }
+    my $db_modifiers = get_parameter_modifiers($db_string);
+    if ($db_string =~ /^GG/) {
+        $extra_param_hash->{DB}->{OTUS} = "/srv/whitlam/bio/db/gg/from_www.secongenome.com/2012_10/gg_12_10_otus/rep_set/97_otus.fasta";
+        $extra_param_hash->{DB}->{TAXONOMIES} = "/srv/whitlam/bio/db/gg/from_www.secongenome.com/2012_10/gg_12_10_otus/taxonomy/97_otu_taxonomy.txt";
+        $extra_param_hash->{DB}->{DESCRIPTION} = "Using Oct 2012 Greengenes OTUS/Taxonomy";
+    } elsif ($db_string =~ /^SILVA/) {
+        $extra_param_hash->{DB}->{OTUS} = "/srv/whitlam/bio/db/Silva/QIIME_files_r108/rep_set/Silva_108_rep_set.fna";
+        $extra_param_hash->{DB}->{TAXONOMIES} = "/srv/whitlam/bio/db/Silva/QIIME_files_r108/taxa_mapping/Silva_108_taxa_mapping.txt";
+        $extra_param_hash->{DB}->{IMPUTED} = "/srv/whitlam/bio/db/Silva/QIIME_files_r108/core_aligned/Silva_108_core_aligned_seqs.fasta";
+        $extra_param_hash->{DB}->{DESCRIPTION} = "Using Silva r108 database OTUS/Taxonomy";
+    } elsif ($db_string =~ /^MERGED/) {
+        $extra_param_hash->{DB}->{OTUS} = "/srv/whitlam/bio/db/merged_gg_silva/201210/merged_gg_silva_seqs.fasta";
+        $extra_param_hash->{DB}->{TAXONOMIES} = "/srv/whitlam/bio/db/merged_gg_silva/201210/merged_gg_silva_taxo.txt";
+        $extra_param_hash->{DB}->{DESCRIPTION} = "Using Merged Silva r108 and Oct 2012 greengenes database OTUS/Taxonomy";
+    } else {
+        die "Taxonomic assignment database unknown - $db_string";
+    }
+    use Data::Dumper;
 }
 
 sub read_sample_exclusion {

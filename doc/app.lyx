@@ -17,8 +17,8 @@
 \newenvironment{command}{\everypar{\hangindent=4em\hangafter=2}}
 
 % Variables used within the document
-\newcommand{\currentVersion}{2.1.2}
-\newcommand{\frankenQIIMEVersion}{1.1.0}
+\newcommand{\currentVersion}{3.0.2}
+\newcommand{\frankenQIIMEVersion}{1.2.0}
 \end_preamble
 \options intoc,bibliography=totoc,index=totoc,BCOR7.5mm,captions=tableheading
 \use_default_options true
@@ -223,13 +223,13 @@ italics
 \begin_layout Quote
 
 \family typewriter
-$ app_do_QA.pl -c 
+$ app_create_analysis.pl -c 
 \shape italic
 app_config_file
 \shape default
- [-acacia_conf 
+ [-o 
 \shape italic
-acacia_config_file
+output_folder
 \shape default
 ]
 \end_layout
@@ -239,7 +239,7 @@ specifies that the user will need to type the command starting from
 \begin_inset Quotes eld
 \end_inset
 
-app_do_QA.pl
+app_create_analysis.pl
 \begin_inset Quotes erd
 \end_inset
 
@@ -249,8 +249,8 @@ app_do_QA.pl
 app_config_file 
 \family default
 \shape default
-with the name of the APP config file, and may optionally specify a config
- file for acacia.
+with the name of the APP config file, and may optionally specify an output
+ folder.
 \end_layout
 
 \begin_layout Chapter
@@ -288,9 +288,10 @@ Initialising APP
 
 \begin_layout Standard
 There are several versions of APP available to the end user.
- At the moment there are two major releases of APP, versions 1 and 2.
- Version 1 has now been deprecated, provided only for backwards compatibility.
- Version 2 is now the active development branch, and it is 
+ At the moment there are three major releases of APP, versions 1, 2 and
+ 3.
+ Versions 1 and 2 are now deprecated, provided only for backwards compatibility.
+ Version 3 is now the active development branch, and it is 
 \emph on
 HIGHLY
 \emph default
@@ -302,7 +303,7 @@ HIGHLY
 \end_layout
 
 \begin_layout Subsection
-Loading APP 2
+Loading APP 3
 \end_layout
 
 \begin_layout Standard
@@ -316,19 +317,39 @@ $ module load app/latest
 \end_layout
 
 \begin_layout Standard
-Older versions on the APP 2 branch (of the form 2.x.x) can be loaded explicitly
+Older versions on the APP 3 branch (of the form 3.x.x) can be loaded explicitly
  using the following command:
 \end_layout
 
 \begin_layout Quote
 
 \family typewriter
-$ module load app/2.x.x
+$ module load app/3.x.x
 \end_layout
 
 \begin_layout Standard
 In any case, all versions on the APP 2 branch automatically load dependencies
  to ensure correct versioning.
+ Note that all further documentation refers to the APP 3 branch and example
+ commands may not work with the APP 1 and 2 branches.
+ Please see the original APP documentation for information about APP 1 and
+ 2.
+\end_layout
+
+\begin_layout Subsection
+Loading APP 2 (deprecated)
+\end_layout
+
+\begin_layout Standard
+APP 2 is provided for backwards compatibility purposes and the code is no
+ longer updated.
+ APP 2 can be loaded in the same way as APP 3:
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+$ module load app/2.x.x
 \end_layout
 
 \begin_layout Subsection
@@ -365,12 +386,6 @@ vanilla
 $ module load qiime
 \end_layout
 
-\begin_layout Standard
-Note that all further documentation refers to the APP2 branch and example
- commands may not work with the APP 1 branch.
- Please see the original APP documentation for information about APP 1.
-\end_layout
-
 \begin_layout Section
 Microbial Community Analysis
 \end_layout
@@ -382,7 +397,7 @@ For the following section, the data generated for job id 100 will be used
 \end_layout
 
 \begin_layout Subsection
-Creating a working directory
+Creating a Working Directory
 \end_layout
 
 \begin_layout Standard
@@ -449,7 +464,8 @@ status collapsed
 
 \begin_layout Plain Layout
 In actuality, the naming rules are less strict than described here.
- For more information, read the app_do_QA.pl reference in section 
+ For more information, read the app_create_analysis.pl reference in section
+ 
 \begin_inset CommandInset ref
 LatexCommand ref
 reference "sec:Script-Reference"
@@ -466,34 +482,34 @@ reference "sec:Script-Reference"
 \end_layout
 
 \begin_layout Subsection
-Running the QA Pipeline
+Creating an Analysis Directory
 \end_layout
 
 \begin_layout Standard
-The first stage of APP performs the quality control and preprocessing of
- the data required for analysis using QIIME.
- It comprises of three stages: Firstly, demultiplexing and low quality sequence
- removal using 
-\emph on
-split_libraries.py
-\emph default
- from QIIME.
- Secondly, chimera detection and removal using usearch (uclust).
- Finally, denoising using Acacia.
- To run the QA stage, run app_do_AQ.pl passing the app config file as a parameter.
- You will also need to specify a length (in bp) to trim the reads.
+The first stage of APP pipeline requires the creation of an analysis instance
+ (contained within a directory).
+ To create this instance, run app_create_analysis.pl with minimal parameters,
+ specifying only the app config file.
+ This will create a default analysis which will use the CD-HIT-OTU + ACACIA
+ pipeline and the Greengenes Oct 2012 reference taxonomy.
 \end_layout
 
 \begin_layout Quote
 
 \family typewriter
-$ app_do_QA.pl -c app_100.config -l 350
+$ app_create_analysis.pl -c app_100.config -o tutorial_analysis
 \end_layout
 
 \begin_layout Standard
-This will produce a QA folder in the working directory.
- Descriptions of the tasks performed by app_do_QA.pl and the resulting files
- are described in the app_do_QA.pl subsection of chapter 
+This will produce an analysis folder in the working directory (called tutorial_a
+nalysis), with will be passed to the next part of the pipeline to run the
+ analysis.
+ Note: This is a very basic description of the capabilities of app_create_analys
+is.pl demonstrated for walkthough purposes.
+ A description of its full capabilities, including running non-default analyses
+ and a description of the app_config_file parameters, as well as the resulting
+ files, are described in the app_create_analysis.pl subsection of chapter
+ 
 \begin_inset CommandInset ref
 LatexCommand ref
 reference "sec:Script-Reference"
@@ -504,576 +520,48 @@ reference "sec:Script-Reference"
 \end_layout
 
 \begin_layout Subsection
-Running the Results Pipeline
+Running the Analysis
 \end_layout
 
 \begin_layout Standard
-After the QA pipeline completes, the APP config file will have been updated
- to include read numbers for that sample after every stage in the QA pipeline.
- The final column of the APP config file determines whether that sample
- is used for further analysis (1 for yes, 0 for no).
- Edit this column to remove samples with low read numbers from the analysis.
- In the following example of the top part of an edited APP config file,
- Bob-1 (Sample ID: 122) has been removed from analysis by changing the final
- column from 1 to 0:
-\end_layout
-
-\begin_layout Verse
-
-\size tiny
-\begin_inset Tabular
-<lyxtabular version="3" rows="5" columns="8">
-<features tabularvalignment="middle">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<row>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-#SampleID
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-BarcodeSequence
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-LinkerPrimerSequence
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-Description
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-RAW
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-CHIME
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-ACC
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-USE
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-122
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-ACAGC
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-acgggcggtgwgtRc
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-Bob-1
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-134
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-133
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-98
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-0
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-123
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-ACTAT
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-acgggcggtgwgtRc
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-Bob-2
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-1176
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-1176
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-1054
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-1
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-124
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-ATGAC
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-acgggcggtgwgtRc
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-Bob-3
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-2245
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-2233
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-2198
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-1
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-125
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-AGAGT
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-acgggcggtgwgtRc
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-Bob-4
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-1004
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-999
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-958
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size tiny
-1
-\end_layout
-
-\end_inset
-</cell>
-</row>
-</lyxtabular>
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-From here the results pipeline can be run using the following command:
+After the analysis directory is created, app_create_analysis.pl will output
+ to terminal the command required to commence the analysis.
+ 
 \end_layout
 
 \begin_layout Quote
 
 \family typewriter
-$ app_make_results.pl -c app_100.config [-i 
-\shape italic
-percent_identity_cutoff
-\shape default
-] [-e 
-\shape italic
-e_value_cutoff
-\shape default
-]
+$ app_run_analysis.pl -d tutorial_analysis
 \end_layout
 
 \begin_layout Standard
-This will run through QIIME and pick OTUs, assign taxonomy to these OTUs,
- normalise across samples and calculate alpha and beta diversity metrics.
- The output files will be located in a folder named app_analysis_
-\shape italic
-yyyymmdd
-\shape default
- (or in the case where that folder name is unavailable, app_analysis_
-\shape italic
-yyyymmdd
-\shape default
-_
-\shape italic
-n
-\shape default
-, where 
-\shape italic
-n
-\shape default
- is an folder counter starting from 1.
- A description of the output files from app_make_results.pl is available
- in chapter 
-\begin_inset CommandInset ref
-LatexCommand ref
-reference "sec:Script-Reference"
-
-\end_inset
-
-.
-\end_layout
-
-\begin_layout Subsection
-Running the Image Creation Pipeline
-\end_layout
-
-\begin_layout Standard
-After the results pipeline completes, some of the results can be converted
- to images for visualisation purposes.
- In order to create these images, the make images pipeline can be run using
- the the following command:
+The script will then run through the pipeline, until it reaches a stage
+ where it will require the user to choose which samples to keep for the
+ analysis.
+ You will need to edit the sample_exclusion file (with your favourite editor,
+ we will use vim here) to decide with samples to keep.
 \end_layout
 
 \begin_layout Quote
 
 \family typewriter
-$ app_make_images.pl -c app_100.config -d 
-\shape italic
-app_analysis_directory
+$ vim tutorial_analysis/sample_exclusion.txt
 \end_layout
 
 \begin_layout Standard
-In the previous command, 
+Restart the analysis using the same command used to commence the analysis.
+\end_layout
+
+\begin_layout Quote
+
 \family typewriter
-\shape italic
-app_analysis_directory
-\family default
-\shape default
- refers to the directory created by app_make_results.pl.
- A description of the output files from app_make_images.pl is available in
- chapter 
-\begin_inset CommandInset ref
-LatexCommand ref
-reference "sec:Script-Reference"
+$ app_run_analysis.pl -d tutorial_analysis
+\end_layout
 
-\end_inset
-
-.
+\begin_layout Standard
+This command can also be used to restart the analysis at its most recent
+ point in the case of interruption.
 \end_layout
 
 \begin_layout Chapter
@@ -1339,7 +827,7 @@ Description
 \end_layout
 
 \begin_layout Section
-app_do_QA.pl
+app_create_analysis.pl
 \end_layout
 
 \begin_layout Minisec
@@ -1347,9 +835,8 @@ Summary
 \end_layout
 
 \begin_layout Standard
-Performs sample demultiplexing and sequence filtering using QIIME (split_librari
-es.py), chimera removal using usearch (uchime) and denoising using Acacia
- of a pyrotag dataset.
+Creates and initialises an APP analysis directory from one or more APP config
+ files.
 \end_layout
 
 \begin_layout Minisec
@@ -1359,19 +846,53 @@ Syntax
 \begin_layout Quote
 
 \family typewriter
-$ app_do_QA.pl -c
+$ app_create_analysis.pl -c
 \shape italic
- app_config_file
+ app_config_file(s)
 \shape default
- -l 
+ [-l 
 \shape italic
 trim_length
 \shape default
- [-acacia_conf
+ -o
 \shape italic
- acacia_config_file
+ output_directory
 \shape default
 ]
+\end_layout
+
+\begin_layout Standard
+where:
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+\shape italic
+app_config_file(s) - 
+\family default
+\shape default
+Comma separated list of APP config files.
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+\shape italic
+trim_length - 
+\family default
+\shape default
+Length (in bp) to which reads will be hard trimmed (default: 250).
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+\shape italic
+output_directory - 
+\family default
+\shape default
+APP analysis directory to create (default: app_analysis_<date>).
 \end_layout
 
 \begin_layout Minisec
@@ -1379,9 +900,9 @@ Input Files
 \end_layout
 
 \begin_layout Standard
-app_do_QA.pl expects a FASTA and Quality file to be in the current working
- directory as well as a APP config file (the format of this file is described
- in 
+app_create_analysis.pl expects a FASTA and Quality file to be in the same
+ directory as each specified APP config file (the format of this file is
+ described in 
 \begin_inset CommandInset ref
 LatexCommand ref
 reference "sec:APP-Config-File"
@@ -1389,11 +910,11 @@ reference "sec:APP-Config-File"
 \end_inset
 
 ).
- In addition, the config file needs to be named of the form app_
+ In addition, each config file needs to be named of the form app_
 \shape italic
 prefix
 \shape default
-.config and the FASTA and Quality files named of the form 
+.config and the corresponding FASTA and Quality files named of the form 
 \shape italic
 prefix
 \shape default
@@ -1406,6 +927,7 @@ prefix
 prefix
 \shape default
  can be any string (as long as the filename is valid).
+ 
 \end_layout
 
 \begin_layout Subsubsection*
@@ -1413,14 +935,18 @@ Details
 \end_layout
 
 \begin_layout Standard
-app_do_QA.pl is responsible for the QA of raw data before its analysis with
- app_make_results.pl (wrapper for QIIME + additional scripts).
- Firstly, it takes the provided APP config file and generates a QIIME mapping
- file, which is then used along with the provided FASTA and Quality files
- to run split_libraries.py from QIIME.
- The output is then provided to uclust in order to remove chimeric sequences.
- Non-chimeric sequences are then provided to ACACIA for denoising, and completio
-n of ACACIA signifies the end of the QA pipeline.
+app_create_analysis.pl is responsible for setting up an APP analysis folder
+ before its analysis with app_run_analysis.pl.
+ It is also responsible for the conversion of configuration parameters given
+ in the config file to commands to run during the analysis.
+ A full listing of all the available parameters are available in 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "sec:APP-Config-File"
+
+\end_inset
+
+.
  
 \end_layout
 
@@ -1429,7 +955,8 @@ Output Files
 \end_layout
 
 \begin_layout Standard
-This script will create a directory called 'QA' in the current working directory.
+This script will create an analysis directory in the current working directory
+ (if not specified).
  Contained within this directory are the following files.
 \begin_inset ERT
 status open
@@ -1448,7 +975,7 @@ nopagebreak
 
 \begin_layout Standard
 \begin_inset Tabular
-<lyxtabular version="3" rows="9" columns="2">
+<lyxtabular version="3" rows="4" columns="2">
 <features tabularvalignment="middle">
 <column alignment="left" valignment="top" width="0">
 <column alignment="left" valignment="top" width="10cm">
@@ -1477,7 +1004,7 @@ Description
 \begin_inset Text
 
 \begin_layout Plain Layout
-ch.fasta
+config.txt
 \end_layout
 
 \end_inset
@@ -1486,7 +1013,7 @@ ch.fasta
 \begin_inset Text
 
 \begin_layout Plain Layout
-FASTA file which contains all chimeric sequences.
+Internal config file used by APP (do not edit)
 \end_layout
 
 \end_inset
@@ -1497,7 +1024,7 @@ FASTA file which contains all chimeric sequences.
 \begin_inset Text
 
 \begin_layout Plain Layout
-denoised_acacia/
+original_app_configs/
 \end_layout
 
 \end_inset
@@ -1506,110 +1033,7 @@ denoised_acacia/
 \begin_inset Text
 
 \begin_layout Plain Layout
-Contains output of ACACIA (see ACACIA documentation) which are used for
- app_make_results.pl.
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-good.fasta
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-FASTA file which contains all non-chimeric sequences and input file for
- ACACIA.
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-histograms.txt
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-Histogram of sequence lengths after processing with split_libraries.py.
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-qiime_mapping.txt
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-The mapping file QIIME uses for split_libraries.py, generated from the APP
- config file.
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-seqs_filtered.qual
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-Quality file corresponding to seqs.fna.
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-seqs.fna
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-Output FASTA of split_libraries.py, and input for uchime/uclust.
+Contains a copy of the APP config file(s) passed to the script.
 \end_layout
 
 \end_inset
@@ -1620,7 +1044,7 @@ Output FASTA of split_libraries.py, and input for uchime/uclust.
 \begin_inset Text
 
 \begin_layout Plain Layout
-split_library_log.txt
+raw_files/
 \end_layout
 
 \end_inset
@@ -1629,13 +1053,97 @@ split_library_log.txt
 \begin_inset Text
 
 \begin_layout Plain Layout
-Stats log of processing performed by split_libraries.py.
+Contains symbolic links to the FASTA and Quality Files for the APP config
+ file(s).
 \end_layout
 
 \end_inset
 </cell>
 </row>
 </lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+app_run_analysis.pl
+\end_layout
+
+\begin_layout Minisec
+Summary
+\end_layout
+
+\begin_layout Standard
+Starts the analysis of an analysis folder, or continue an interrupted analysis.
+\end_layout
+
+\begin_layout Minisec
+Syntax
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+$ app_run_analysis.pl -c
+\shape italic
+ app_analysis_directory
+\end_layout
+
+\begin_layout Standard
+where:
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+\shape italic
+app_analysis_directory - 
+\family default
+\shape default
+APP analysis directory created by app_create_analysis.pl.
+\end_layout
+
+\begin_layout Minisec
+Input Files
+\end_layout
+
+\begin_layout Standard
+app_run_analysis.pl expects an APP analysis directory (originally created
+ by app_create_analysis.pl) as its input.
+\end_layout
+
+\begin_layout Subsubsection*
+Details
+\end_layout
+
+\begin_layout Standard
+app_run_analysis.pl is responsible for choosing and running the various pyrotag
+ analysis pipelines based on the configuration given by app_create_analysis.pl.
+ It may need to run multiple times on a single analysis folder, as the pipeline
+ may interrupt itself when user input is required.
+ The output of the script to the terminal will instruct the user if further
+ analysis needs to be performed.
+\end_layout
+
+\begin_layout Minisec
+Output Files
+\end_layout
+
+\begin_layout Standard
+This script will create files within the specified APP analysis directory.
+ Output varies dependent on the chosen pipeline, listed here are files that
+ are consistent between pipelines.
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+nopagebreak
+\end_layout
 
 \end_inset
 
@@ -1656,6 +1164,506 @@ name "sec:APP-Config-File"
 \end_inset
 
 
+\end_layout
+
+\begin_layout Subsection
+General Format
+\end_layout
+
+\begin_layout Standard
+Separated from the sample specification is the pipeline configuration section
+ of the app config file.
+ Each configuration parameter is specified on a newline and is of the form:
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+\shape italic
+CONFIG_PARAM=VALUE[,MODIFIER[,MODIFIER...]]
+\end_layout
+
+\begin_layout Standard
+For example, the following specifies to run the QIIME pipeline, except without
+ ACACIA.
+\end_layout
+
+\begin_layout Quote
+
+\family typewriter
+\shape italic
+PIPELINE=QIIME,NO_ACACIA
+\end_layout
+
+\begin_layout Standard
+Below is a list of configurable parameters, available options for each parameter
+ and available modifers for each option.
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+nopagebreak
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Tabular
+<lyxtabular version="3" rows="10" columns="4">
+<features tabularvalignment="middle">
+<column alignment="center" valignment="top" width="0pt">
+<column alignment="center" valignment="top" width="0pt">
+<column alignment="center" valignment="top" width="0pt">
+<column alignment="left" valignment="top" width="8cm">
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+Config Param
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+Option
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+Modifier
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+Description
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell multirow="3" alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+PIPELINE
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+This config parameter enables the user to choose the analysis pipeline used
+ for APP.
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell multirow="4" alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell multirow="3" alignment="center" valignment="middle" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+QIIME
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+Use the default QIIME pipeline.
+ Split_libraries.py, UCLUST chimera checking, ACACIA, UCLUST otu picking,
+ QIIME OTU table creation.
+ QIIME alpha diversity.
+ 
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell multirow="4" alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell multirow="4" alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+NO_ACACIA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+Default QIIME pipeline except skip ACACIA.
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell multirow="4" alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell multirow="3" alignment="center" valignment="middle" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+CD_HIT_OTU
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+Use the default CD_HIT_OTU pipeline.
+ Split_libraries.py, ACACIA, CD_HIT otu picking, CD_HIT_OTU OTU table creation.
+ QIIME alpha diversity.
+ (Default pipeline)
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell multirow="4" alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell multirow="4" alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+NO_ACACIA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+Default CD_HIT_OTU pipeline except skip ACACIA.
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell multirow="3" alignment="center" valignment="middle" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+DB
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+This config parameter enables the user to choose the taxonomy database.
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell multirow="4" alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+GG
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+Use Greengenes database Oct 2012 release.
+ (Default DB)
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell multirow="4" alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+SILVA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+Use SILVA database (release r108)
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell multirow="4" alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+MERGED
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size scriptsize
+Use Florent's merged database (Bacterial/Archaea - Greengenes Oct 2012,
+ Eukaryote - SILVA r108).
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Chapter
+Pipelines
 \end_layout
 
 \end_body
