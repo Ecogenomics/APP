@@ -1,6 +1,7 @@
 package AppCommon;
 require Exporter;
 use File::Basename;
+use File::Spec;
 use File::Temp qw(tempfile);
 use List::Util qw(min max);
 use Carp;
@@ -23,6 +24,7 @@ our @EXPORT=qw(
     get_read_counts_from_OTU_table
     normalise_otu_table
     setup_db_paths
+    jack_knifing
 );
 
 our %known_config_options = (
@@ -32,7 +34,8 @@ our %known_config_options = (
     MUL_RARE_S => [],
     MUL_RARE_N => [],
     PIPELINE => [],
-    DB => ['SILVA','GG']
+    OTU_TABLES_ONLY => [],
+    DB => ['SILVA','GG','MERGED']
 );
 
 ################################################################################
@@ -99,9 +102,9 @@ sub create_data_file_links {
         if (! -e "$job_dir/$job_name.qual") {
              croak "ERROR: Unable to find qual file: $job_dir/$job_name.qual\n";
         }
-        symlink "../../$job_dir/$job_name.qual", "$output_dir/raw_files/$job_name.qual"
+        symlink File::Spec->rel2abs("$job_dir/$job_name.qual"), "$output_dir/raw_files/$job_name.qual"
             or die "Unable to symlink $job_dir/$job_name.qual\n";
-        symlink "../../$fasta_files[0]", "$output_dir/raw_files/$job_name.fasta"
+        symlink File::Spec->rel2abs("$fasta_files[0]"), "$output_dir/raw_files/$job_name.fasta"
             or die "Unable to symlink $job_dir/$fasta_files[0]\n";
     }
 }
@@ -146,26 +149,29 @@ sub parse_app_config_files {
             # If we are in the config section...
             if ($in_config_section) {
                 my @splitline = split /=/, $line;
+                my @split_without_modifiers = split /,/, $splitline[1];
+                my $without_modifers = $split_without_modifiers[0];
                 
                 # Check if the option is known/allowed.
                 if (exists($known_config_options{$splitline[0]})) {
+                    
                     my @possible_choices = @{$known_config_options{$splitline[0]}};
                     my %options = map { $_ => 1 } @possible_choices;
                     
                     # Check if the choices for this option are limited.
-                    if ((! scalar @possible_choices) || exists ($options{$splitline[1]})) {
+                    if ((! scalar @possible_choices) || exists ($options{$without_modifers})) {
                         
                         # Check if the choice is defined.
-                        if (! defined ($splitline[1]) || $splitline[1] =~ /^\s*$/) {
+                        if (! defined ($without_modifers) || $splitline[1] =~ /^\s*$/) {
                             print "No config setting for option " .
-                            $splitline[0] . " in $config_file: - ignoring option.\n";
+                            $without_modifers . " in $config_file: - ignoring option.\n";
                         } else {
                             push @{$config_array}, [$splitline[0], $splitline[1]];
                         }
                     } else {
                         print "Unknown config setting for option " .
-                            $splitline[0] . " in $config_file: " .
-                            $splitline[1] . " - ignoring option.\n";
+                            $without_modifers . " in $config_file: " .
+                            $without_modifers . " - ignoring option.\n";
                     }
                 } else {
                     print "Unknown config option in $config_file: " .
@@ -243,9 +249,17 @@ sub setup_db_paths {
     }
     my $db_modifiers = get_parameter_modifiers($db_string);
     if ($db_string =~ /^GG/) {
-        $extra_param_hash->{DB}->{OTUS} = "/srv/whitlam/bio/db/gg/from_www.secongenome.com/2012_10/gg_12_10_otus/rep_set/97_otus.fasta";
-        $extra_param_hash->{DB}->{TAXONOMIES} = "/srv/whitlam/bio/db/gg/from_www.secongenome.com/2012_10/gg_12_10_otus/taxonomy/97_otu_taxonomy.txt";
-        $extra_param_hash->{DB}->{DESCRIPTION} = "Using Oct 2012 Greengenes OTUS/Taxonomy";
+        if (exists($db_modifiers->{'11_02'})) {
+            $extra_param_hash->{DB}->{OTUS} = "/srv/whitlam/bio/db/gg/qiime_default/gg_otus_4feb2011/rep_set/gg_99_otus_4feb2011.fasta";
+            $extra_param_hash->{DB}->{TAXONOMIES} = "/srv/whitlam/bio/db/gg/qiime_default/gg_otus_4feb2011/taxonomies/greengenes_tax.txt";
+            $extra_param_hash->{DB}->{IMPUTED} ="/srv/whitlam/bio/db/gg/qiime_default/core_set_aligned.fasta.imputed";
+            $extra_param_hash->{DB}->{DESCRIPTION} = "Using Feb 2011 Greengenes OTUS/Taxonomy";
+        } else {
+            $extra_param_hash->{DB}->{OTUS} = "/srv/whitlam/bio/db/gg/from_www.secongenome.com/2012_10/gg_12_10_otus/rep_set/99_otus.fasta";
+            $extra_param_hash->{DB}->{TAXONOMIES} = "/srv/whitlam/bio/db/gg/from_www.secongenome.com/2012_10/gg_12_10_otus/taxonomy/99_otu_taxonomy.txt";
+            $extra_param_hash->{DB}->{IMPUTED} ="/srv/whitlam/bio/db/gg/from_www.secongenome.com/2012_10/gg_12_10_otu_99_aligned.fasta";
+            $extra_param_hash->{DB}->{DESCRIPTION} = "Using Oct 2012 Greengenes OTUS/Taxonomy";
+        }
     } elsif ($db_string =~ /^SILVA/) {
         $extra_param_hash->{DB}->{OTUS} = "/srv/whitlam/bio/db/Silva/QIIME_files_r108/rep_set/Silva_108_rep_set.fna";
         $extra_param_hash->{DB}->{TAXONOMIES} = "/srv/whitlam/bio/db/Silva/QIIME_files_r108/taxa_mapping/Silva_108_taxa_mapping.txt";
@@ -386,14 +400,56 @@ sub normalise_otu_table {
             
         `cp $normalised_OTU_file $results_dir/normalised_otu_table.txt`;
         
-        checkAndRunCommand("reformat_otu_table.py",  [{-i => "$results_dir/normalised_otu_table.txt",
-                                                       -t => "$processing_dir/OTU_numbered_tax_assignments.txt",
-                                                       -o => "$results_dir/normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
+        return "$results_dir/normalised_otu_table.txt";
         
-        print "Summarizing by taxa.....\n";
+}
 
-        checkAndRunCommand("summarize_taxa.py", [{-i => "$results_dir/normalised_otu_table.txt",
-                                                  -o => "$results_dir/breakdown_by_taxonomy/"}], DIE_ON_FAILURE); 
+sub jack_knifing
+{
+    #-----
+    # Do jackknifing for a specific type of matrix
+    #
+    my ($matrix_type, $raw_otu_table, $raw_tree, $jack_knife_folder, $output_folder) = @_;
+
+    # Produce distance matrix reflecting beta diversity in non-normalised OTU table
+    checkAndRunCommand("beta_diversity.py", [{-i => $raw_otu_table,
+                                              -o => "$output_folder/$matrix_type",
+                                              -m => $matrix_type,
+                                              -t => $raw_tree}], DIE_ON_FAILURE);
+
+    my $basename = basename($raw_otu_table);
+    $basename =~ s/\.txt//;
+    my $beta_otu_table = $matrix_type."_$basename.txt";
+    my $upgma_cluster_tree = $matrix_type."_" . $basename . "_upgma.tre";
+
+    checkAndRunCommand("upgma_cluster.py", [{-i => "$output_folder/$matrix_type/$beta_otu_table",
+                                             -o => "$output_folder/$matrix_type/$upgma_cluster_tree"}], DIE_ON_FAILURE);
+
+    # Produce distance matrices reflecting beta diversity in the rarefied OTU tables
+    checkAndRunCommand("beta_diversity.py", [{-i => $jack_knife_folder,
+                                              -o => "$output_folder/$matrix_type/rare_dm/",
+                                              -m => $matrix_type,
+                                              -t => $raw_tree}], DIE_ON_FAILURE);
+
+    # Perform UPGMA clustering on rarefied distance matrices
+    checkAndRunCommand("upgma_cluster.py", [{-i => "$output_folder/$matrix_type/rare_dm/",
+                                             -o => "$output_folder/$matrix_type/rare_upgma/"}], DIE_ON_FAILURE);
+
+    # Compare the consensus tree to the beta-derived trees
+    checkAndRunCommand("tree_compare.py", [{-s => "$output_folder/$matrix_type/rare_upgma/",
+                                            -m => "$output_folder/$matrix_type/$upgma_cluster_tree",
+                                            -o => "$output_folder/$matrix_type/upgma_cmp/"}], DIE_ON_FAILURE);
+
+    # Compute principal coordinates
+    checkAndRunCommand("principal_coordinates.py", [{-i => "$output_folder/$matrix_type/rare_dm/",
+                                                     -o => "$output_folder/$matrix_type/pcoa/"}], DIE_ON_FAILURE);
+
+    # Make PDF of Jackknife tree with labeled support: weighted unifrac command
+    my $output_pdf = "$output_folder/$matrix_type"."_betadiv_jackknife_tree.pdf";
+    checkAndRunCommand("make_bootstrapped_tree.py", [{-m => "$output_folder/$matrix_type/upgma_cmp/master_tree.tre",
+                                                      -s => "$output_folder/$matrix_type/upgma_cmp/jackknife_support.txt",
+                                                      -o => $output_pdf}], DIE_ON_FAILURE);
+
 }
 
 sub run_R_cmd

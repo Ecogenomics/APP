@@ -32,6 +32,8 @@ use Carp;
 
 #CPAN modules
 use File::Basename;
+use File::Spec;
+use File::Copy;
 use File::Temp qw(tempfile);
 use List::Util qw(min max);
 use Statistics::R;
@@ -144,8 +146,6 @@ sub qiime_pipeline {
     
     my ($config_hash, $extra_param_hash) = @_;
     my $pipeline_modifiers = get_parameter_modifiers($config_hash->{PIPELINE});
-    
-    my $GG_OTUS_FASTA = "/srv/whitlam/bio/db/gg/from_www.secongenome.com/2012_10/gg_12_10_otus/rep_set/97_otus.fasta";
     
     my $processing_dir = 'processing';
     my $results_dir = 'results';
@@ -835,7 +835,8 @@ sub cd_hit_otu_pipeline {
             reformat_CDHIT_repset("$processing_dir/cd_hit_otu/OTU",
                                   "$processing_dir/cd_hit_otu/OTU_numbered");
         
-        symlink("$results_dir/rep_set.fa","$processing_dir/cd_hit_otu/OTU_numbered");
+        symlink("../$processing_dir/cd_hit_otu/OTU_numbered", "$results_dir/rep_set.fa");
+
        
         $config_hash->{PIPELINE_STAGE} = "ASSIGN_TAXONOMY";
             
@@ -844,7 +845,7 @@ sub cd_hit_otu_pipeline {
     }
     
     if ($config_hash->{PIPELINE_STAGE} eq "ASSIGN_TAXONOMY") {
-    
+        
         print "Assigning taxonomy for non normalised data set...\n";
         
         # update our databases (GG by default)
@@ -857,7 +858,7 @@ sub cd_hit_otu_pipeline {
         
         #print "Assign taxonomy method: $assign_taxonomy_method\n";
         #if ($assign_taxonomy_method eq 'blast') {
-            checkAndRunCommand("assign_taxonomy.py", [{-i => "$processing_dir/cd_hit_otu/OTU_numbered",
+            checkAndRunCommand("assign_taxonomy.py", [{-i => "$results_dir/rep_set.fa",
                                                        -t => $extra_param_hash->{DB}->{TAXONOMIES},
                                                        -b => $extra_param_hash->{DB}->{OTUS},
                                                        -m => "blast",
@@ -889,13 +890,13 @@ sub cd_hit_otu_pipeline {
         
         print "Making NON NORMALISED otu table...\n";
         
-        create_QIIME_OTU_from_CDHIT("$processing_dir/OTU_numbered_tax_assignments.txt",
+        create_QIIME_OTU_from_CDHIT("$processing_dir/rep_set_tax_assignments.txt",
                                     "$processing_dir/cd_hit_otu/OTU.nr2nd.clstr.otu.txt",
                                     "$results_dir/non_normalised_otu_table.txt");
         
         print "Reformating OTU table...\n";
         checkAndRunCommand("reformat_otu_table.py",  [{-i => "$results_dir/non_normalised_otu_table.txt",
-                                                       -t => "$processing_dir/OTU_numbered_tax_assignments.txt",
+                                                       -t => "$processing_dir/rep_set_tax_assignments.txt",
                                                        -o => "$results_dir/non_normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
     
         my $otu_sample_counts = get_read_counts_from_cd_hit_otu("$processing_dir/cd_hit_otu/OTU.nr2nd.clstr.sample.txt");
@@ -952,11 +953,15 @@ sub cd_hit_otu_pipeline {
     
     if ($config_hash->{PIPELINE_STAGE} eq "NORMALISATION") {
         
-        normalise_otu_table($options, \%sample_for_analysis_hash, \%sample_counts,
-                            $results_dir, $processing_dir);
+        my $normalised_otu_table = normalise_otu_table($options, \%sample_for_analysis_hash, \%sample_counts,
+                                                       $results_dir, $processing_dir);
+                
+        checkAndRunCommand("reformat_otu_table.py",  [{-i => $normalised_otu_table,
+                                                       -t => "$processing_dir/rep_set_tax_assignments.txt",
+                                                       -o => "$results_dir/normalised_otu_table_expanded.tsv"}], IGNORE_FAILURE);
         
+        print "Summarizing by taxa.....\n";
         
-        # HERE!!!!!!!!!!!!!
         checkAndRunCommand("summarize_taxa.py", [{-i => "$results_dir/normalised_otu_table.txt",
                                                   -o => "$results_dir/breakdown_by_taxonomy/"}], DIE_ON_FAILURE);
          
@@ -965,9 +970,9 @@ sub cd_hit_otu_pipeline {
         create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
     }
     
-    if (($config_hash->{OTU_TABLES_ONLY}) && (! exists($pipeline_modifiers->{OTU_TABLES_ONLY}))) {
+    if ((uc($config_hash->{OTU_TABLES_ONLY}) eq 'TRUE') && (! exists($pipeline_modifiers->{OTU_TABLES_ONLY}))) {
     
-        print "APP configured to only create OTU tables. Stopping here.";
+        print "APP configured to only create OTU tables. Stopping here.\n";
         
         return;
     
@@ -1051,25 +1056,218 @@ sub cd_hit_otu_pipeline {
                                                               "--imagetype" => $format}], DIE_ON_FAILURE);
         }
         
-        $config_hash->{PIPELINE_STAGE} = "TREE_CREATION";
+        $config_hash->{PIPELINE_STAGE} = "SETUP_PHYLOGENY_FILES";
             
         create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
         
     }
     
-    if ($config_hash->{PIPELINE_STAGE} eq "TREE_CREATION") {
+    if ($config_hash->{PIPELINE_STAGE} eq "SETUP_PHYLOGENY_FILES") {
     
-        my $imputed_file = $QIIME_imputed_file;
+        my @directories = ("phylogenetic_metrics",
+                           "phylogenetic_metrics/blast_substituted_phylogeny",
+                           "phylogenetic_metrics/de_novo_phylogeny");
         
+        foreach my $top_directory (($results_dir, $processing_dir)) {
+            foreach my $directory (@directories) {
+                if (! -e "$top_directory/$directory") {
+                    mkdir "$top_directory/$directory" or die "Unable to make directory: $top_directory/$directory\n";
+                }
+            }
+        }
+        
+        $config_hash->{PIPELINE_STAGE} = "DE_NOVO_PHYLOGENY";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "DE_NOVO_PHYLOGENY") {
+     
         print "Treeing non normalised data set...\n";
-        checkAndRunCommand("align_seqs.py", [{-i => "$processing_dir/cd_hit_otu/OTU_numbered",
-                                              -t => $imputed_file,
+        
+        my $dn_processing_dir = "$processing_dir/phylogenetic_metrics/de_novo_phylogeny/";
+        my $dn_results_dir = "$results_dir/phylogenetic_metrics/de_novo_phylogeny/";
+        
+        
+        checkAndRunCommand("align_seqs.py", [{-i => "$results_dir/rep_set.fa",
+                                              -t => $extra_param_hash->{DB}->{IMPUTED},
                                               -p => 0.6,
-                                              -o => "$processing_dir/pynast_aligned"}], DIE_ON_FAILURE);
+                                              -o => "$dn_processing_dir/pynast_aligned"}], DIE_ON_FAILURE);
                 
-        checkAndRunCommand("filter_alignment.py", [{-i => "$processing_dir/pynast_aligned/OTU_numbered_aligned",
-                                                    -o => "$processing_dir"}], DIE_ON_FAILURE);
-    }    
+        checkAndRunCommand("filter_alignment.py", [{-i => "$dn_processing_dir/pynast_aligned/rep_set_aligned.fa",
+                                                    -o => "$dn_processing_dir"}], DIE_ON_FAILURE);
+        
+        checkAndRunCommand("make_phylogeny.py", [{-i => "$dn_processing_dir/rep_set_aligned_pfiltered.fasta",
+                                                  -r => "midpoint"}], DIE_ON_FAILURE);
+        
+        print "Calculating (phylogeny dependent) alpha diversity metrics for de novo phylogeny....\n";
+        
+        checkAndRunCommand("alpha_diversity.py", [{-i => "$processing_dir/rarefied_otu_tables/",
+                                                   -t => "$dn_processing_dir/rep_set_aligned_pfiltered.tre",
+                                                   -o => "$dn_processing_dir/alpha_div/",
+                                                   -m => "PD_whole_tree"}], DIE_ON_FAILURE);
+        
+        checkAndRunCommand("collate_alpha.py", [{-i => "$dn_processing_dir/alpha_div/",
+                                                 -o => "$dn_processing_dir/alpha_div_collated/"}], DIE_ON_FAILURE);
+        
+        foreach my $format (("png", "svg")) {
+            checkAndRunCommand("make_rarefaction_plots.py", [{-i => "$dn_processing_dir/alpha_div_collated/",
+                                                              -m => "qiime_mapping.txt",
+                                                              -o => "$dn_results_dir/alpha_diversity/",
+                                                              "--resolution" => 300,
+                                                              "--imagetype" => $format}], DIE_ON_FAILURE);
+        }
+        
+        $config_hash->{PIPELINE_STAGE} = "PREPARE_BETA_DIVERSITY";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+        
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "PREPARE_BETA_DIVERSITY") {
+        
+        if ((scalar keys %sample_for_analysis_hash) < 2) {
+            print "Need more than 1 sample to preform beta diversity.\n";
+            print "Stopping here\n";
+            
+        }
+        
+        my $min_samples = min(map {$sample_counts{$_}} keys %sample_for_analysis_hash);
+        
+        my $rare_depth = (int($min_samples / 50) - 1) * 50;
+                
+        print "Jackknifing in preparation for beta diversity\n";
+        
+        my $jack_knife_folder = "$processing_dir/rare_tables/JN";
+        
+        if (! -e $jack_knife_folder) {
+            mkdir $jack_knife_folder or die "Unable to make directory: $jack_knife_folder\n";
+        }
+        
+        foreach my $jn_file_counter (0..100) {
+            my $jn_from_file = "rarefaction_".$rare_depth."_".$jn_file_counter.".txt";
+            copy("$processing_dir/rare_tables/$jn_from_file", "$jack_knife_folder/");
+        }        
+        
+        $config_hash->{PIPELINE_STAGE} = "DE_NOVO_PHYLOGENY_BETA_DIVERSITY";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+    
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "DE_NOVO_PHYLOGENY_BETA_DIVERSITY") {
+    
+        print "Jacknifed beta diversity (de-novo phylogeny)....\n";
+        
+        my $beta_div_folder = "$results_dir/phylogenetic_metrics/de_novo_phylogeny/beta_diversity/";
+        
+        if (! -e $beta_div_folder) {
+            mkdir $beta_div_folder or die "Unable to make folder: $beta_div_folder\n";
+        }
+        
+        foreach my $OTU_table (('non_normalised_otu_table','normalised_otu_table')) {
+            
+            my $output_folder = "$results_dir/phylogenetic_metrics/de_novo_phylogeny/beta_diversity/$OTU_table";
+            
+            if (! -e $output_folder) {
+                mkdir $output_folder or die "Unable to make folder: $output_folder\n";
+            }
+            
+            foreach my $method (("weighted_unifrac", "unweighted_unifrac", "euclidean", "hellinger")) {
+                jack_knifing($method, "$results_dir/$OTU_table.txt",
+                             "$processing_dir/phylogenetic_metrics/de_novo_phylogeny/rep_set_aligned_pfiltered.tre",
+                             "$processing_dir/rare_tables/JN", $output_folder);
+            }
+        }
+        $config_hash->{PIPELINE_STAGE} = "BLAST_SUBSTITUTED_PHYLOGENY";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+    }
+    
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "BLAST_SUBSTITUTED_PHYLOGENY") {
+    
+        my $bs_processing_dir = "$processing_dir/phylogenetic_metrics/blast_substituted_phylogeny/";
+        
+        checkAndRunCommand("generate_fasta_from_taxonomy.py",
+                         [{-t => "$processing_dir/rep_set_tax_assignments.txt",
+                           -r => "$results_dir/rep_set.fa",
+                           -b => $extra_param_hash->{DB}->{IMPUTED},
+                           -o => "$bs_processing_dir/blast_substituted_rep_set_aligned.fasta"}],
+                       DIE_ON_FAILURE);
+        
+        checkAndRunCommand("make_phylogeny.py", [{-i => "$bs_processing_dir/blast_substituted_rep_set_aligned.fasta",
+                                                  -r => "midpoint"}], DIE_ON_FAILURE);
+        
+        
+        $config_hash->{PIPELINE_STAGE} = "BLAST_SUBSTITUTED_PHYLOGENY_ALPHA_DIVERSITY";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+    
+    }
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "BLAST_SUBSTITUTED_PHYLOGENY_ALPHA_DIVERSITY") {
+    
+        print "Calculating (phylogeny dependent) alpha diversity metrics for blast substituted phylogeny....\n";
+        
+        my $bs_processing_dir = "$processing_dir/phylogenetic_metrics/blast_substituted_phylogeny/";
+        my $bs_results_dir = "$results_dir/phylogenetic_metrics/blast_substituted_phylogeny/";
+        
+        checkAndRunCommand("alpha_diversity.py", [{-i => "$processing_dir/rarefied_otu_tables/",
+                                                   -t => "$bs_processing_dir/blast_substituted_rep_set_aligned.tre",
+                                                   -o => "$bs_processing_dir/alpha_div/",
+                                                   -m => "PD_whole_tree"}], DIE_ON_FAILURE);
+        
+        checkAndRunCommand("collate_alpha.py", [{-i => "$bs_processing_dir/alpha_div/",
+                                                 -o => "$bs_processing_dir/alpha_div_collated/"}], DIE_ON_FAILURE);
+        
+        foreach my $format (("png", "svg")) {
+            checkAndRunCommand("make_rarefaction_plots.py", [{-i => "$bs_processing_dir/alpha_div_collated/",
+                                                              -m => "qiime_mapping.txt",
+                                                              -o => "$bs_results_dir/alpha_diversity/",
+                                                              "--resolution" => 300,
+                                                              "--imagetype" => $format}], DIE_ON_FAILURE);
+        }
+            
+        $config_hash->{PIPELINE_STAGE} = "BLAST_SUBSTITUTED_PHYLOGENY_BETA_DIVERSITY";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+    
+    }
+    
+    
+    if ($config_hash->{PIPELINE_STAGE} eq "BLAST_SUBSTITUTED_PHYLOGENY_BETA_DIVERSITY") {
+        
+        print "Jacknifed beta diversity (blast substituted phylogeny)....\n";
+        
+        my $beta_div_folder = "$results_dir/phylogenetic_metrics/blast_substituted_phylogeny/beta_diversity/";
+        
+        if (! -e $beta_div_folder) {
+            mkdir $beta_div_folder or die "Unable to make folder: $beta_div_folder\n";
+        }
+        
+        foreach my $OTU_table (('non_normalised_otu_table','normalised_otu_table')) {
+        
+            my $output_folder = "$results_dir/phylogenetic_metrics/blast_substituted_phylogeny/beta_diversity/$OTU_table";
+            
+            if (! -e $output_folder) {
+                mkdir $output_folder or die "Unable to make folder: $output_folder\n";
+            }
+            
+            foreach my $method (("weighted_unifrac", "unweighted_unifrac", "euclidean", "hellinger")) {
+                jack_knifing($method, "$results_dir/$OTU_table.txt",
+                             "$processing_dir/phylogenetic_metrics/blast_substituted_phylogeny/blast_substituted_rep_set_aligned.tre",
+                             "$processing_dir/rare_tables/JN", $output_folder);
+            }
+        }
+    
+        $config_hash->{PIPELINE_STAGE} = "NEXT";
+            
+        create_analysis_config_file("config.txt", convert_hash_to_array($config_hash));
+    }
+    
+    
 }
 
 ######################################################################
