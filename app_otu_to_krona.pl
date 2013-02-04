@@ -137,7 +137,7 @@ if (! defined $global_options->{'temp'}) {
 }
 
 if (! defined $global_options->{'keep'}) {
-    #unlink @file_names;
+    unlink @file_names;
 }
 
 exit;
