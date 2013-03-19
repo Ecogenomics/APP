@@ -44,7 +44,16 @@
 \index_command default
 \paperfontsize default
 \spacing single
-\use_hyperref false
+\use_hyperref true
+\pdf_bookmarks true
+\pdf_bookmarksnumbered false
+\pdf_bookmarksopen false
+\pdf_bookmarksopenlevel 1
+\pdf_breaklinks false
+\pdf_pdfborder true
+\pdf_colorlinks true
+\pdf_backref false
+\pdf_pdfusetitle true
 \papersize default
 \use_geometry false
 \use_amsmath 1
@@ -1071,6 +1080,39 @@ Contains symbolic links to the FASTA and Quality Files for the APP config
 \end_inset
 
 
+\end_layout
+
+\begin_layout Subsection
+Creating analyses from multiple runs
+\end_layout
+
+\begin_layout Standard
+When you want to combine samples from multiple runs into a single pyrotag
+ processing run (and therefore a single OTU table), you need to run app_create_a
+nalysis with multiple config files, similar to below.
+ The use of app_combine.pl is now deprecated.
+\end_layout
+
+\begin_layout Quote
+$ app_create_analysis.pl -c 78/app_78.config,79/app_79.config
+\end_layout
+
+\begin_layout Standard
+The first config file's (in this case app_78.config) pipeline and database
+ will be used - everything after the @@ in the remaining config files will
+ be ignored.
+ If you run app_create_analysis.pl on a config file straight out of a munging
+ run, then you may see errors like this
+\end_layout
+
+\begin_layout Quote
+"No config setting for option in original..blah blah blah"
+\end_layout
+
+\begin_layout Standard
+This is ok, and isn't known to cause any problems.
+ The rest of the pipeline is run as if you only have a single config file
+ to process.
 \end_layout
 
 \begin_layout Section
