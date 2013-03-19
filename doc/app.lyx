@@ -17,7 +17,7 @@
 \newenvironment{command}{\everypar{\hangindent=4em\hangafter=2}}
 
 % Variables used within the document
-\newcommand{\currentVersion}{3.0.2}
+\newcommand{\currentVersion}{3.0.3}
 \newcommand{\frankenQIIMEVersion}{1.2.0}
 \end_preamble
 \options intoc,bibliography=totoc,index=totoc,BCOR7.5mm,captions=tableheading
@@ -848,7 +848,7 @@ Syntax
 \family typewriter
 $ app_create_analysis.pl -c
 \shape italic
- app_config_file(s)
+ app_config_file1[,app_config_file2...]
 \shape default
  [-l 
 \shape italic
@@ -869,10 +869,11 @@ where:
 
 \family typewriter
 \shape italic
-app_config_file(s) - 
+app_config_file1,...
+ - 
 \family default
 \shape default
-Comma separated list of APP config files.
+Comma separated list of one or more APP config files.
 \end_layout
 
 \begin_layout Quote
@@ -928,6 +929,11 @@ prefix
 \shape default
  can be any string (as long as the filename is valid).
  
+\end_layout
+
+\begin_layout Standard
+Any configuration parameters e.g.
+ PIPELINE=QIIME should be specified in the first config file.
 \end_layout
 
 \begin_layout Subsubsection*
