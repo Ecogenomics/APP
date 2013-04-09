@@ -1134,7 +1134,7 @@ Syntax
 \begin_layout Quote
 
 \family typewriter
-$ app_run_analysis.pl -c
+$ app_run_analysis.pl -d
 \shape italic
  app_analysis_directory
 \end_layout
