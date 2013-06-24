@@ -2,7 +2,7 @@
 ###############################################################################
 #
 #    app_otu_to_krona.pl
-#    
+#
 #    Make a pretty Krona graph
 #
 #    Copyright (C) 2012 Connor Skennerton
@@ -31,6 +31,7 @@ use Getopt::Long;
 use Pod::Usage;
 use IO::File;
 #CPAN modules
+use Data::Dumper;
 
 #locally-written modules
 
@@ -65,13 +66,13 @@ my @tmp_files;
 my $first_line = <$in>;
 if($global_options->{"pyrotagger"}) {
     $first_line =~ s/\s+$//;
-    
+
     # figure out how many samples there are
     my @n = split(/\t/, $first_line);
     my $number_of_columns = scalar @n;
     $number_of_samples = $number_of_columns - $base_columns;
     @sample_names = splice(@n, 1, $number_of_samples);
-} else {
+} elsif ($global_options->{'qiime'}) {
     # the second line in qiime is the header
     my $second_line = <$in>;
     chomp $second_line;
@@ -80,7 +81,11 @@ if($global_options->{"pyrotagger"}) {
     # remove first and last columns
     shift @sample_names; pop @sample_names;
     # @names = map {$_.".krona.tmp.otus"} @z;
+} else {
+    die "No OTU table format specified. Use -pyrotagger or -qiime\n";
 }
+
+print "Found ".($#sample_names+1)." samples to pass to krona.\n";
 
 
 my @file_names = map{$_.".krona.tmp.otus"} @sample_names;
@@ -90,9 +95,9 @@ while(<$in>) {
     my @otus;
     my @c = split(/\t/, $_);
     if($global_options->{"pyrotagger"}) {
-        
+
         # if pyrotagger doesn't find a hit it outputs nothing
-        # therefore the elements of the array 
+        # therefore the elements of the array
         next if($#c <( $number_of_samples + $base_columns));
 
         @otus = @c[1 .. $number_of_samples];
@@ -105,14 +110,14 @@ while(<$in>) {
         foreach my $i (0 .. $#otus) {
             $tmp_files[$i]->print($otus[$i],"\t", $tax_string, "\n");
         }
-    } else {
+    } elsif ($global_options->{'qiime'}) {
         # deal with the greengenes or silva formatted tax string at the end of a line
-        my @l = split(/;?\w_{1,2}|;/,$c[-1]);
-        
+        my @l = split(/;? \w_{1,2}|;/,$c[-1]);
+
         # Add the OTU number on the end. This stops Krona from collapsing OTUs visually, which can lead to misinterpretation of results.
         # Also, by putting an OTU number on the end, it is quicker to interrogate clades of interest arising from the krona back in the OTU table
         push @l, "otu".$c[0];
-        
+
         # Print the number of sequences detected and the phylogeny to
         # the file which krona runs on.
         foreach my $i (1 .. $#c - 1) {
@@ -120,6 +125,8 @@ while(<$in>) {
                 $tmp_files[$i-1]->print($c[$i],"\t",join("\t", @l), "\n");
             }
         }
+    } else {
+        die "programming error!"
     }
 }
 foreach (@tmp_files) {
@@ -133,7 +140,7 @@ if (! defined $global_options->{'temp'}) {
         $input_arguments[$i] = $file_names[$i].','.$sample_names[$i];
     }
     my $files = join (" ", @input_arguments);
-    `ktImportText -o $output_file_name $files`
+    `ktImportText -o $output_file_name $files`;
 }
 
 if (! defined $global_options->{'keep'}) {
@@ -148,11 +155,14 @@ sub checkParams {
     #-----
     # Do any and all options checking here...
     #
-    my @standard_options = ( "help|h+", "keep|k+", "temp|t+", "input|i:s", "output|o:s", "pyrotagger|p+" );
+    my @standard_options = ( "help|h+", "keep|k+", "temp|t+", "input|i:s", "output|o:s", "pyrotagger|p+", "qiime+" );
+
     my %options;
+    # Default to pyrotagger input file format
+    $options{'qiime'} = 1;
 
     # Add any other command line options, and the code to handle them
-    # 
+    #
     GetOptions( \%options, @standard_options );
 
     # if no arguments supplied print the usage and exit
@@ -171,14 +181,14 @@ sub checkParams {
 
 sub printAtStart {
 print<<"EOF";
----------------------------------------------------------------- 
+----------------------------------------------------------------
  $0
  Copyright (C) 2012 Connor Skennerton, Ben Woodcroft
-    
+
  This program comes with ABSOLUTELY NO WARRANTY;
  This is free software, and you are welcome to redistribute it
  under certain conditions: See the source for more details.
----------------------------------------------------------------- 
+----------------------------------------------------------------
 EOF
 }
 
@@ -193,7 +203,7 @@ sub openWrite
 }
 
 sub openRead
-{   
+{
     #-----
     # Open a file for reading
     #
@@ -208,7 +218,7 @@ sub overrideDefault
     # Set and override default values for parameters
     #
     my ($default_value, $option_name) = @_;
-    if(exists $global_options->{$option_name}) 
+    if(exists $global_options->{$option_name})
     {
         return $global_options->{$option_name};
     }
@@ -243,6 +253,9 @@ __DATA__
    Take an OTU table outputted by APP and use krona to create an interactive
    pie chart layout thingy...
 
+   You most likely wish to run this file on the 'non_normalised_otu_table.txt' file
+   that APP outputs, which is in qiime format.
+
 =head1 SYNOPSIS
 
     app_otu_to_krona.pl [-help|h] [-input|i] [-keep|k] [-temp|t] [-output|o]
@@ -254,5 +267,6 @@ __DATA__
                                    running krona
       [-output -o]                 Name of the output html file produced by krona [default: text.krona.html]
       [-pyrotagger -p]             Input OTU table is in pyrotagger format
-         
+      [-qiime]                     Input OTU table is in QIIME format (default)
+
 =cut
