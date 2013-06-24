@@ -283,9 +283,10 @@ sub read_sample_exclusion {
     while (my $line = <$fh>) {
         chomp $line;
         my @splitline = split /\t/, $line;
-        my $use_sample = $splitline[$#splitline ]
-        if ($use_sample != '1' and $use_sample != '0'){
-            die "Malformed sample exclusion file detected. Does this file have windows line endings, per chance?\n";
+        my $use_sample = $splitline[$#splitline ];
+        if ($use_sample !~ m/^[01]$/){
+            die "Malformed sample exclusion file detected. Does this file have windows line endings, per chance?\n".
+              "The line malformed is $line\n";
         }
         $sample_use{$splitline[0]} = $splitline[$#splitline ];
     }
@@ -373,7 +374,7 @@ sub normalise_otu_table {
         my $global_norm_sample_size = (int($min_samples / 50) - 1) * 50;
 
         if ($global_norm_sample_size <= 0) {
-            print "Unable to normalise, some samples have too few reads (the minimum is $min_samples). Review " . $options->{'d'} . "/sample_exclusion.txt " .
+            print "Unable to normalise, some samples have too few reads (the smallest number not excluded in your sample_exclusion file is $min_samples). Review " . $options->{'d'} . "/sample_exclusion.txt " .
                   "and rerun app_run_analysis.pl -d " . $options->{'d'} . "\n\n";
         }
 
