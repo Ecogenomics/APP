@@ -107,28 +107,30 @@ if (defined ($options->{'caliper'})) {
         next if($line_fields[1] =~ /^Ladd/);
         next if($line_fields[2] eq "");
         
-        add_well_data($line_fields[1], int($line_fields[2]), $line_fields[3]); 
+        add_well_data($line_fields[1], int($line_fields[2]), float($line_fields[3])); 
     }
 } else {
     while (my $line = <$in_fh>) {
-        chomp $line;
-        $line =~ s/ ,/,/g;
+        $line =~ s/\r?\n$//g; # DOS aware chomp
+        $line =~ s/[\ ]*,[\ ]*/,/g;
         my @splitline = split /,/, $line;
         if ($splitline[0] eq '') {
             next
         };
         my $well = $splitline[0];
         while (my $line = <$in_fh>) {
-            chomp $line;
-            $line =~ s/ ,/,/g;
+            $line =~ s/\r?\n$//g; # DOS aware chomp
+            $line =~ s/[\ ]*,[\ ]*/,/g;
+        
             my @splitline = split /,/, $line;
-            if ($splitline[0] eq '') {
+            if (! ($line) || $splitline[0] eq '') {
                 last
             };
             # Skip if its a header line or a marker
-            if (($splitline[0] !~ /^\d+$/) || ($splitline[8] =~ /Marker/)) {
+            if (($splitline[0] !~ /^\d+$/) || (defined ($splitline[8]) && $splitline[8] =~ /Marker/)) {
                 next;
             }
+            #print $well, "-", int($splitline[2]), "-", $splitline[3], "\n";
             add_well_data($well, int($splitline[2]), $splitline[3]); 
         }
     }
