@@ -95,6 +95,7 @@ while(<$pdb_fh>)
 close $pdb_fh;
 
 # open the in file
+
 open my $in_fh, "<", $options->{'concentration'} or die "Cannot open input file $!";
 if (defined ($options->{'caliper'})) {
     # kill the header
@@ -113,25 +114,60 @@ if (defined ($options->{'caliper'})) {
     while (my $line = <$in_fh>) {
         $line =~ s/\r?\n$//g; # DOS aware chomp
         $line =~ s/[\ ]*,[\ ]*/,/g;
-        my @splitline = split /,/, $line;
+        my @splitline = split ',', $line;
+        
+        my $fields = {};
+        
         if ($splitline[0] eq '') {
             next
         };
         my $well = $splitline[0];
+        my $header_line = <$in_fh>;
+        chomp $header_line;
+        
+        my $header_line_styles = {
+            "Size [bp],Calibrated Conc. [ng/\xB5l],Assigned Conc. [ng/\xB5l],Molarity [nmol/l],% Integrated Area,Peak Comment,Observations" => {
+            #"Size" => { #[bp],Calibrated Conc." => { # [ng/\xB5l],Assigned Conc. [ng/\xB5l],Molarity [nmol/l],% Integrated Area,Peak Comment,Observations" => {
+                'size' => 0,
+                'concentration' => 1,
+                'observations' => 6
+            },
+            "Peak, Wavelength, MW [bp], Conc. [ng/\xB5l] (Calibrated), Conc. [ng/\xB5l] (Assigned), Molarity [nmol/l], % of Integrated Area, Peak Comment, Observations" => {
+                'size' => 2,
+                'concentration' => 3,
+                'observations' => 8
+            }
+        };
+        
+        foreach my $header_line_style (keys %{$header_line_styles}) {
+            # Make the header line regexp safe
+            my $header_line_regexp = quotemeta($header_line_style);
+            if ($header_line =~ /$header_line_regexp/) {
+                $fields = $header_line_styles->{$header_line_style};
+                last;
+            }
+            
+        }
+        
+        if (scalar(keys(%{$fields})) == 0) {
+            die "Unknown header line format: $header_line\n";
+        };
+
         while (my $line = <$in_fh>) {
             $line =~ s/\r?\n$//g; # DOS aware chomp
             $line =~ s/[\ ]*,[\ ]*/,/g;
         
-            my @splitline = split /,/, $line;
-            if (! ($line) || $splitline[0] eq '') {
+            my @splitline = split ',', $line;
+            if (scalar(@splitline) == 0 || $splitline[0] eq '') {
                 last
             };
-            # Skip if its a header line or a marker
-            if (($splitline[0] !~ /^\d+$/) || (defined ($splitline[8]) && $splitline[8] =~ /Marker/)) {
+           
+            # Skip if its a marker
+            if (defined ($splitline[$fields->{'observations'}]) && $splitline[$fields->{'observations'}] =~ /Marker/) {
                 next;
             }
             #print $well, "-", int($splitline[2]), "-", $splitline[3], "\n";
-            add_well_data($well, int($splitline[2]), $splitline[3]); 
+            add_well_data($well, int($splitline[$fields->{'size'}]), $splitline[$fields->{'concentration'}]); 
         }
     }
 }
